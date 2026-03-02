@@ -1,0 +1,21 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}SecureScan{% endblock %}
+
+{% block body %}
+
+{# TEST INPUT POUR RECUPERER LES REPO ---- A REFAIRE AU PROPRE#}
+{# POUR GERER TOUT SUR LA MEME PAGE : UTILISER LES STATUS #}
+
+<form action="{{ path('app_upload') }}" method="post" enctype="multipart/form-data">
+    <label for="project-url">URL GitHub</label>
+    <input type="text" id="project-url" name="project_url" placeholder="https://github.com/username/repo">
+
+    <label for="project-zip">Ou .zip</label>
+    <input type="file" id="project-zip" name="project_zip" accept=".zip">
+
+    <button type="submit">Lancer l'analyse</button>
+</form>
+
+
+{% endblock %}
