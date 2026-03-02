@@ -36,7 +36,7 @@ final class HomeController extends AbstractController
             if(!str_ends_with($url, '.git')) {
                 $error = "L'URL doit être un dépôt valide";
                 
-                $this->redirectToRoute('app_home', $error);
+                $this->redirectToRoute('app_home');
             }
 
             // clone du repo
