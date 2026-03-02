@@ -9,6 +9,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Uid\Uuid;
+use ZipArchive;
 
 final class HomeController extends AbstractController
 {
@@ -26,7 +27,7 @@ final class HomeController extends AbstractController
     public function upload(Request $request): Response
     {
         $url = $request->request->get('project_url');
-        $zip = $request->request->get('project_zip');
+        $zip = $request->files->get('project_zip');
 
         // SI URL GIT
         if ($url && !$zip) {
@@ -62,7 +63,21 @@ final class HomeController extends AbstractController
 
         // SI .ZIP
         if ($zip && !$url) {
+            //créer une archive pour gérer les fichiers zip
+            $zipProject = new ZipArchive();
 
+            try {
+                // créer un dossier unique
+                $projectId = 'project_' . Uuid::v4();
+                $projectsDir = $this->getParameter('kernel.project_dir') . '/projects' . '/' . $projectId;
+
+                // ouvrir et extraire le zip dans /projects/
+                $zipProject->open($zip->getPathname());
+                $zipProject->extractTo($projectsDir);
+                $zipProject->close();
+            } catch (\Exception $e) {
+                return $this->redirectToRoute('app_home');
+            }
         }
 
         return $this->redirectToRoute('app_home');
