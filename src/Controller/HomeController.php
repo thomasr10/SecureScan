@@ -28,30 +28,39 @@ final class HomeController extends AbstractController
         $url = $request->request->get('project_url');
         $zip = $request->request->get('project_zip');
 
+        // SI URL GIT
         if ($url && !$zip) {
             
             // checker si url est bien un .git
             $url = trim($url);
             if(!str_ends_with($url, '.git')) {
                 $error = "L'URL doit être un dépôt valide";
+                
+                $this->redirectToRoute('app_home', $error);
             }
 
             // clone du repo
-            
-            // créer un dossier unique
-            $projectId = 'project_' . Uuid::v4();
+            try {
+                // créer un dossier unique
+                $projectId = 'project_' . Uuid::v4();
 
-            // process = composant symfo qui permet d'exécuter des commandes
-            $projectsDir = $this->getParameter('kernel.project_dir') . '/projects' . '/' . $projectId;  
-            $process = new Process(['git', 'clone', $url, $projectsDir]);
-            $process->run();
+                // process = composant symfo qui permet d'exécuter des commandes
+                $projectsDir = $this->getParameter('kernel.project_dir') . '/projects' . '/' . $projectId;  
+                $process = new Process(['git', 'clone', $url, $projectsDir]);
+                $process->run();
+                
+                if (!$process->isSuccessful()) {
+                    throw new ProcessFailedException($process->getErrorOutput());
+                }
 
-            if (!$process->isSuccessful()) {
-                throw new ProcessFailedException($process);
+            } catch(\Exception $e) {
+                // ajouter erreurs
+                return $this->redirectToRoute('app_home');
             }
 
         }
 
+        // SI .ZIP
         if ($zip && !$url) {
 
         }
