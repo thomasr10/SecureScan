@@ -5,7 +5,6 @@ namespace App\Controller;
 use App\Service\PhpstanAnalyzerService;
 use App\Service\LanguageDetector;
 use Psr\Log\LoggerInterface;
- 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,6 +21,7 @@ final class HomeController extends AbstractController
         private LanguageDetector $languageDetector
     ) {}
 
+    #[IsGranted("ROLE_USER")]
     #[Route('/', name: 'app_home', methods: ['GET'])]
     public function showHome(): Response
     {
@@ -68,6 +68,8 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
+                $phpAnalyzerService->analyze($projectsDir, $projectId);
+
                 return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload Git: ' . $e->getMessage());
@@ -103,6 +105,8 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
+        $phpAnalyzerService->analyze($projectsDir, $projectId);
+
                 return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload ZIP: ' . $e->getMessage());
@@ -110,8 +114,6 @@ final class HomeController extends AbstractController
             }
         }
         
-        $phpAnalyzerService->analyze($projectsDir, $projectId);
-
         return $this->redirectToRoute('app_home');
     }
 }
