@@ -1,0 +1,11 @@
+{
+  "name": "secure-scan",
+  "version": "1.0.0",
+  "description": "SecureScan application",
+  "scripts": {
+    "dev": "asset-mapper-compiler",
+    "build": "asset-mapper-compiler --build"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
