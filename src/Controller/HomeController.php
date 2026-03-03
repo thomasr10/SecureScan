@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Service\PhpstanAnalyzerService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
@@ -26,7 +27,7 @@ final class HomeController extends AbstractController
     }
     
     #[Route('/upload', name: 'app_upload', methods: ['POST'])]
-    public function upload(Request $request): Response
+    public function upload(Request $request, PhpstanAnalyzerService $phpAnalyzerService): Response
     {
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
@@ -81,6 +82,8 @@ final class HomeController extends AbstractController
                 return $this->redirectToRoute('app_home');
             }
         }
+        
+        $phpAnalyzerService->analyze($projectsDir, $projectId);
 
         return $this->redirectToRoute('app_home');
     }
