@@ -34,8 +34,7 @@ class Project
     private ?\DateTimeImmutable $created_at = null;
 
     #[ORM\ManyToOne(inversedBy: 'projects')]
-    #[ORM\JoinColumn(nullable: false)]
-    private ?User $user = null;
+    private ?User $user_id = null;
 
     /**
      * @var Collection<int, Report>
@@ -125,14 +124,14 @@ class Project
         return $this;
     }
 
-    public function getUser(): ?User
+    public function getUserId(): ?User
     {
-        return $this->user;
+        return $this->user_id;
     }
 
-    public function setUser(?User $user): static
+    public function setUserId(?User $user_id): static
     {
-        $this->user = $user;
+        $this->user_id = $user_id;
 
         return $this;
     }
