@@ -1,0 +1,301 @@
+{% extends 'base.html.twig' %}
+
+{# 
+    Template: owasp/mapping.html.twig
+    
+    Interface web interactive pour visualiser les vulnérabilités mappées à OWASP.
+    
+    Sections:
+    1. Header: Dégradé violet-bleu avec titre
+    2. Statistiques: Vue d'ensemble avec cartes colorées par catégorie
+    3. Catégories: La liste détaillée de chaque catégorie OWASP
+    4. Vulnérabilités: Table complète des vulnérabilités détectées
+    
+    Architecture:
+    - HTML statique pour la structure
+    - CSS inline pour pas de dépendances externes
+    - JavaScript fetch() asynchrone pour charger les données via API
+    - Interactivité: boutons "Voir détails" pour explorer chaque catégorie
+    
+    Données chargées de l'API (asynchrone):
+    - /api/owasp/statistics - Pour les statistiques
+    - /api/owasp/categories - Pour les catégories
+    - /api/owasp/vulnerabilities - Pour les vulnérabilités
+    - /api/owasp/category/{code} - Pour les détails d'une catégorie
+#}
+
+{% block title %}OWASP Mapping Results - SecureScan{% endblock %}
+
+{% block content %}
+<div style="padding: 0;">
+    {# ===== HEADER AVEC DÉGRADÉ ===== #}
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 0; margin-bottom: 40px;">
+        <div style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
+            <h1 style="margin: 0; font-size: 2.5em;">🔒 SecureScan - Résultats OWASP</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">Analyse de sécurité mappée sur OWASP Top 10 2025</p>
+        </div>
+    </div>
+
+    <div style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
+        {# ===== SECTION STATISTIQUES ===== #}
+        {# 
+            Affiche un résumé en cartes:
+            - Une carte par catégorie OWASP
+            - Nombre total de vulnérabilités
+            - Répartition par sévérité (critical, high, medium, low)
+            - Couleur unique pour chaque catégorie
+        #}
+        <h2 style="font-size: 1.8em; color: #333; margin: 40px 0 20px 0; border-bottom: 3px solid #667eea; padding-bottom: 10px;">📊 Vue d'ensemble</h2>
+        <div id="statistics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+            <div style="text-align: center; padding: 20px;">
+                <p style="color: #666;">Chargement des statistiques...</p>
+            </div>
+        </div>
+
+        {# ===== SECTION CATÉGORIES OWASP ===== #}
+        {# 
+            Liste détaillée de chaque catégorie avec:
+            - Code (A01, A02, etc.)
+            - Nom
+            - Description
+            - Exemples
+            - Nombre de vulnérabilités
+            - Bouton pour voir les détails (charge les vulnérabilités pour cette catégorie)
+        #}
+        <h2 style="font-size: 1.8em; color: #333; margin: 40px 0 20px 0; border-bottom: 3px solid #667eea; padding-bottom: 10px;">🎯 Catégories OWASP</h2>
+        <div id="categories" style="margin-bottom: 40px;">
+            <p style="color: #666;">Chargement des catégories...</p>
+        </div>
+
+        {# ===== SECTION VULNÉRABILITÉS ===== #}
+        {# 
+            Table complète de toutes les vulnérabilités avec:
+            - Titre et description
+            - Sévérité (badge coloré)
+            - Outil de détection
+            - Fichier et ligne affectés
+            - Score de confiance du mappage OWASP
+            - Catégorie OWASP mappée
+        #}
+        <h2 style="font-size: 1.8em; color: #333; margin: 40px 0 20px 0; border-bottom: 3px solid #667eea; padding-bottom: 10px;">⚠️ Vulnérabilités détectées</h2>
+        <div id="vulnerabilities" style="margin-bottom: 40px;">
+            <p style="color: #666;">Chargement des vulnérabilités...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    /**
+     * Fonction principale pour charger toutes les données
+     * 
+     * Flux:
+     * 1. Charge les statistiques et remplit la grille
+     * 2. Charge les catégories
+     * 3. Charge les vulnérabilités
+     * 4. Gère les erreurs
+     * 
+     * Architecture async/await pour meilleure lisibilité
+     */
+    async function loadData() {
+        try {
+            /**
+             * ===== ÉTAPE 1: Charger les statistiques =====
+             * 
+             * Appel: GET /api/owasp/statistics
+             * Réponse: Statistiques par catégorie et sévérité
+             */
+            const statsResponse = await fetch('/api/owasp/statistics');
+            const statsData = await statsResponse.json();
+            
+            const statsGrid = document.getElementById('statistics-grid');
+            let statsHtml = '';
+            
+            // Couleurs uniques pour chaque catégorie OWASP
+            const colors = {
+                'A01': '#FF6B6B',   // Red - Broken Access Control
+                'A02': '#FFA500',   // Orange - Security Misconfiguration
+                'A03': '#FFD93D',   // Yellow - Supply Chain Failures
+                'A04': '#FF6B9D',   // Pink - Cryptographic Failures
+                'A05': '#C44569'    // Dark Pink - Injection
+            };
+            
+            // Génère les cartes de statistiques
+            statsData.statistics.forEach(stat => {
+                const total = stat.totalVulnerabilities;
+                const color = colors[stat.code] || '#667eea';
+                
+                statsHtml += `
+                    <div style="background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 5px solid ${color};">
+                        <div style="text-align: center;">
+                            <div style="display: inline-block; background: ${color}; color: white; padding: 8px 12px; border-radius: 4px; font-weight: bold; margin-bottom: 10px;">${stat.code}</div>
+                            <h4 style="margin: 10px 0; color: #333;">${stat.name}</h4>
+                            <div style="font-size: 2.5em; font-weight: bold; color: ${color}; margin: 10px 0;">${total}</div>
+                            <div style="font-size: 12px; color: #666;">
+                                <div style="display: inline-block; background: #f8d7da; color: #721c24; padding: 5px 10px; border-radius: 3px; margin: 3px;">Critical: ${stat.bySeverity.critical}</div>
+                                <div style="display: inline-block; background: #fff3cd; color: #856404; padding: 5px 10px; border-radius: 3px; margin: 3px;">High: ${stat.bySeverity.high}</div>
+                                <div style="display: inline-block; background: #e2e3e5; color: #383d41; padding: 5px 10px; border-radius: 3px; margin: 3px;">Medium: ${stat.bySeverity.medium}</div>
+                                <div style="display: inline-block; background: #d4edda; color: #155724; padding: 5px 10px; border-radius: 3px; margin: 3px;">Low: ${stat.bySeverity.low}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            statsGrid.innerHTML = statsHtml || '<p style="color: #999;">Pas de données</p>';
+            
+            /**
+             * ===== ÉTAPE 2: Charger les catégories =====
+             * 
+             * Appel: GET /api/owasp/categories
+             * Réponse: Liste de toutes les catégories avec leurs descriptions
+             */
+            const catResponse = await fetch('/api/owasp/categories');
+            const categories = await catResponse.json();
+            
+            const categoriesDiv = document.getElementById('categories');
+            let catHtml = '';
+            
+            // Génère une fiche pour chaque catégorie OWASP
+            categories.forEach(cat => {
+                const color = colors[cat.code] || '#667eea';
+                catHtml += `
+                    <div style="background: white; border-radius: 8px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 5px solid ${color};">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <h3 style="margin: 0 0 10px 0;">
+                                    <span style="display: inline-block; background: ${color}; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; margin-right: 10px; font-size: 0.8em;">${cat.code}</span>
+                                    ${cat.name}
+                                </h3>
+                                <p style="color: #666; margin: 0 0 10px 0;">${cat.description}</p>
+                                <p style="color: #888; font-size: 13px; margin: 0;"><strong>Exemples:</strong> ${cat.examples.join(', ')}</p>
+                            </div>
+                            <div style="background: ${color}; color: white; padding: 15px 20px; border-radius: 4px; text-align: center; min-width: 100px;">
+                                <div style="font-size: 24px; font-weight: bold;">${cat.vulnerabilityCount}</div>
+                                <div style="font-size: 12px;">vulnérabilité${cat.vulnerabilityCount !== 1 ? 's' : ''}</div>
+                            </div>
+                        </div>
+                        <button onclick="toggleDetail('${cat.code}')" style="background: #667eea; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-top: 10px;">Voir les détails</button>
+                        <div id="detail-${cat.code}" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;"></div>
+                    </div>
+                `;
+            });
+            
+            categoriesDiv.innerHTML = catHtml || '<p style="color: #999;">Pas de catégories</p>';
+            
+            /**
+             * ===== ÉTAPE 3: Charger les vulnérabilités =====
+             * 
+             * Appel: GET /api/owasp/vulnerabilities
+             * Réponse: Liste complète des vulnérabilités avec mappage OWASP
+             */
+            const vulnResponse = await fetch('/api/owasp/vulnerabilities');
+            const vulnData = await vulnResponse.json();
+            
+            const vulnDiv = document.getElementById('vulnerabilities');
+            let vulnHtml = '';
+            
+            if (vulnData.vulnerabilities.length === 0) {
+                vulnHtml = '<p style="color: #999;">Aucune vulnérabilité détectée</p>';
+            } else {
+                // Génère une fiche pour chaque vulnérabilité
+                vulnData.vulnerabilities.forEach(vuln => {
+                    // Couleurs pour les niveaux de sévérité
+                    const severityColors = {
+                        'critical': { bg: '#dc3545', text: 'white' },
+                        'high': { bg: '#fd7e14', text: 'white' },
+                        'medium': { bg: '#ffc107', text: '#333' },
+                        'low': { bg: '#28a745', text: 'white' }
+                    };
+                    const sevColor = severityColors[vuln.severity.toLowerCase()] || severityColors['low'];
+                    const owaspColor = colors[vuln.owasp?.code] || '#667eea';
+                    
+                    vulnHtml += `
+                        <div style="background: #f9f9f9; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 3px solid #667eea;">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: bold; color: #333; margin-bottom: 5px;">${vuln.title}</div>
+                                    <p style="color: #666; margin: 5px 0; font-size: 14px;">${vuln.description}</p>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; font-size: 13px;">
+                                        <div><strong>Outil:</strong> ${vuln.tool}</div>
+                                        <div><strong>Fichier:</strong> ${vuln.file || 'N/A'}</div>
+                                        <div><strong>Ligne:</strong> ${vuln.line || 'N/A'}</div>
+                                        <div><strong>Confiance:</strong> ${vuln.confidence}%</div>
+                                    </div>
+                                    <div style="margin-top: 8px;">
+                                        <strong>OWASP:</strong> 
+                                        <span style="display: inline-block; background: ${owaspColor}; color: white; padding: 3px 8px; border-radius: 3px; font-weight: bold; margin-right: 5px;">${vuln.owasp?.code || 'N/A'}</span>
+                                        ${vuln.owasp?.name || 'Non mappée'}
+                                    </div>
+                                </div>
+                                <span style="background: ${sevColor.bg}; color: ${sevColor.text}; padding: 5px 10px; border-radius: 4px; font-weight: bold; white-space: nowrap; margin-left: 10px;">${vuln.severity.toUpperCase()}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            vulnDiv.innerHTML = vulnHtml;
+            
+        } catch (error) {
+            // Gestion des erreurs
+            console.error('Erreur:', error);
+            document.getElementById('statistics-grid').innerHTML = '<p style="color: red;">Erreur au chargement des données</p>';
+            document.getElementById('categories').innerHTML = '<p style="color: red;">Erreur au chargement des catégories</p>';
+            document.getElementById('vulnerabilities').innerHTML = '<p style="color: red;">Erreur au chargement des vulnérabilités</p>';
+        }
+    }
+    
+    /**
+     * Bascule l'affichage des détails d'une catégorie
+     * 
+     * Logique:
+     * 1. Si non affiché: Appelle l'API pour récupérer les vulnérabilités
+     * 2. Formate et affiche la liste
+     * 3. Si affiché: Cache les détails
+     * 
+     * @param {string} code Code OWASP (A01, A05, etc.)
+     */
+    function toggleDetail(code) {
+        const detail = document.getElementById(`detail-${code}`);
+        if (detail.style.display === 'none') {
+            // Charge les détails depuis l'API
+            fetch(`/api/owasp/category/${code}`)
+                .then(res => res.json())
+                .then(data => {
+                    let html = '<h5>Vulnérabilités dans cette catégorie:</h5>';
+                    if (data.vulnerabilities.length === 0) {
+                        html += '<p style="color: #999;">Aucune vulnérabilité</p>';
+                    } else {
+                        html += '<ul style="list-style: none; padding: 0;">';
+                        data.vulnerabilities.forEach(vuln => {
+                            const sevColor = {
+                                'critical': { bg: '#dc3545', text: 'white' },
+                                'high': { bg: '#fd7e14', text: 'white' },
+                                'medium': { bg: '#ffc107', text: '#333' },
+                                'low': { bg: '#28a745', text: 'white' }
+                            }[vuln.severity.toLowerCase()] || { bg: '#28a745', text: 'white' };
+                            html += `
+                                <li style="margin: 8px 0; padding: 8px; background: white; border-radius: 4px;">
+                                    <strong>${vuln.title}</strong>
+                                    <span style="background: ${sevColor.bg}; color: ${sevColor.text}; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 10px;">${vuln.severity}</span>
+                                    <br/>
+                                    <small style="color: #666;">${vuln.description}</small>
+                                </li>
+                            `;
+                        });
+                        html += '</ul>';
+                    }
+                    detail.innerHTML = html;
+                    detail.style.display = 'block';
+                });
+        } else {
+            detail.style.display = 'none';
+        }
+    }
+    
+    /**
+     * Lance le chargement des données au chargement de la page
+     */
+    document.addEventListener('DOMContentLoaded', loadData);
+</script>
+{% endblock %}
