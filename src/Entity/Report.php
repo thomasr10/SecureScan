@@ -2,7 +2,6 @@
 
 namespace App\Entity;
 
-use App\Enum\ProjectStatus;
 use App\Repository\ReportRepository;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -17,14 +16,14 @@ class Report
     #[ORM\Column]
     private array $languages = [];
 
-    #[ORM\Column]
-    private array $frameworks = [];
+    #[ORM\Column(nullable: true)]
+    private ?array $frameworks = null;
 
     #[ORM\Column]
     private ?int $score = null;
 
-    #[ORM\Column(enumType: ProjectStatus::class)]
-    private ?ProjectStatus $status = null;
+    #[ORM\Column(length: 255)]
+    private ?string $status = null;
 
     #[ORM\Column]
     private array $details = [];
@@ -33,7 +32,6 @@ class Report
     private ?\DateTimeImmutable $created_at = null;
 
     #[ORM\ManyToOne(inversedBy: 'reports')]
-    #[ORM\JoinColumn(nullable: false)]
     private ?Project $project = null;
 
     public function getId(): ?int
@@ -53,12 +51,12 @@ class Report
         return $this;
     }
 
-    public function getFrameworks(): array
+    public function getFrameworks(): ?array
     {
         return $this->frameworks;
     }
 
-    public function setFrameworks(array $frameworks): static
+    public function setFrameworks(?array $frameworks): static
     {
         $this->frameworks = $frameworks;
 
@@ -77,12 +75,12 @@ class Report
         return $this;
     }
 
-    public function getStatus(): ?ProjectStatus
+    public function getStatus(): ?string
     {
         return $this->status;
     }
 
-    public function setStatus(ProjectStatus $status): static
+    public function setStatus(string $status): static
     {
         $this->status = $status;
 
