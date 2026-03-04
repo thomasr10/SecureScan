@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Service\PhpstanAnalyzerService;
 use App\Service\LanguageDetector;
+use App\Service\ProjectService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -18,7 +19,8 @@ use ZipArchive;
 final class HomeController extends AbstractController
 {
     public function __construct(
-        private LanguageDetector $languageDetector
+        private LanguageDetector $languageDetector,
+        private ProjectService $projectService
     ) {}
 
     #[IsGranted("ROLE_USER")]
@@ -47,6 +49,9 @@ final class HomeController extends AbstractController
                 return $this->redirectToRoute('app_home');
             }
 
+            $type = 'git';
+            $name = basename($url, '.git');
+
             try {
                 $projectId = 'project_' . Uuid::v4();
                 $projectsDir = $this->getParameter('kernel.project_dir') . '/projects/' . $projectId;
@@ -57,6 +62,9 @@ final class HomeController extends AbstractController
                 if (!$process->isSuccessful()) {
                     throw new ProcessFailedException($process);
                 }
+                
+                // Création + insertion du projet en base
+                $this->projectService->createProject($projectId, $name, $type, $url);
 
                 //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
@@ -70,7 +78,7 @@ final class HomeController extends AbstractController
 
                 $phpAnalyzerService->analyze($projectsDir, $projectId);
 
-                return $this->redirectToRoute('app_home');
+                // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload Git: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
@@ -82,6 +90,9 @@ final class HomeController extends AbstractController
         // =============================
         if ($zip && !$url) {
             $zipProject = new ZipArchive();
+
+            $type = 'zip';
+            $name = pathinfo($zip->getClientOriginalName(), PATHINFO_FILENAME);
 
             try {
                 $projectId = 'project_' . Uuid::v4();
@@ -95,6 +106,9 @@ final class HomeController extends AbstractController
                 $zipProject->extractTo($projectsDir);
                 $zipProject->close();
 
+                // Création + insertion du projet en base
+                $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
+
                 //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
 
@@ -105,9 +119,9 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
-        $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $phpAnalyzerService->analyze($projectsDir, $projectId);
 
-                return $this->redirectToRoute('app_home');
+                // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload ZIP: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
