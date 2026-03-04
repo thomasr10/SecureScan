@@ -7,6 +7,7 @@ use App\Service\NpmAuditService;
 use App\Service\PhpstanAnalyzerService;
 use App\Service\LanguageDetector;
 use App\Service\ProjectService;
+use App\Service\SemgrepScanService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -41,7 +42,8 @@ final class HomeController extends AbstractController
         LoggerInterface $logger,
         PhpstanAnalyzerService $phpAnalyzerService,
         ComposerAuditService $composerAuditService,
-        NpmAuditService $npmAuditService
+        NpmAuditService $npmAuditService,
+        SemgrepScanService $semgrepScanService
     ): Response {
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
@@ -86,6 +88,7 @@ final class HomeController extends AbstractController
                 $phpAnalyzerService->analyze($projectsDir, $projectId);
                 $composerAuditService->audit($projectsDir, $projectId);
                 $npmAuditService->audit($projectsDir, $projectId);
+                $semgrepScanService->scan($projectsDir, $projectId);
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
@@ -131,6 +134,7 @@ final class HomeController extends AbstractController
                 $phpAnalyzerService->analyze($projectsDir, $projectId);
                 $composerAuditService->audit($projectsDir, $projectId);
                 $npmAuditService->audit($projectsDir, $projectId);
+                $semgrepScanService->scan($projectsDir, $projectId);
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
