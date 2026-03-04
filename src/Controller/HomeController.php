@@ -7,6 +7,8 @@ use App\Service\NpmAuditService;
 use App\Service\PhpstanAnalyzerService;
 use App\Service\LanguageDetector;
 use App\Service\ProjectService;
+use App\Service\VulnerabilityNormalise;
+use App\Service\ReportService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -22,7 +24,9 @@ final class HomeController extends AbstractController
 {
     public function __construct(
         private LanguageDetector $languageDetector,
-        private ProjectService $projectService
+        private ProjectService $projectService,
+        private VulnerabilityNormalise $vulnerabilityNormalise,
+        private ReportService $reportService
     ) {}
 
     #[IsGranted("ROLE_USER")]
@@ -71,7 +75,7 @@ final class HomeController extends AbstractController
                 }
 
                 // Création + insertion du projet en base
-                $this->projectService->createProject($projectId, $name, $type, $url);
+                $project = $this->projectService->createProject($projectId, $name, $type, $url);
 
                 //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
@@ -83,9 +87,21 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
-                $phpAnalyzerService->analyze($projectsDir, $projectId);
-                $composerAuditService->audit($projectsDir, $projectId);
-                $npmAuditService->audit($projectsDir, $projectId);
+                // ON RECUPERE LES FICHIERS D'ANALYSE
+                $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
+                
+                // NORMALISATION DES ANALYSES + MERGE ANALYSES
+                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+
+                // SCORE A MODIFIER
+                $score = 80;
+                // STATUS A MODIFIER
+                $status = 'done';
+                
+                // INSERTION RAPPORT EN BDD
+                $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
@@ -116,7 +132,7 @@ final class HomeController extends AbstractController
                 $zipProject->close();
 
                 // Création + insertion du projet en base
-                $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
+                $project = $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
 
                 //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
@@ -128,9 +144,20 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
-                $phpAnalyzerService->analyze($projectsDir, $projectId);
-                $composerAuditService->audit($projectsDir, $projectId);
-                $npmAuditService->audit($projectsDir, $projectId);
+                $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
+
+                // NORMALISATION DES ANALYSES + MERGE ANALYSES
+                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+
+                // SCORE A MODIFIER
+                $score = 80;
+                // STATUS A MODIFIER
+                $status = 'done';
+
+                // INSERTION RAPPORT EN BDD
+                $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
