@@ -1,0 +1,37 @@
+<?php
+namespace App\Service;
+use Symfony\Component\Process\Process;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+
+class ComposerAuditService
+{
+    public function __construct(private ParameterBagInterface $params)
+    {
+    }
+
+    public function audit(string $projectDir, string $projectId)
+    {
+        // vérifie que le dossier des reports est bien créer
+        $reportsDir = $this->params->get("kernel.project_dir") . "/reports/composer_audit_reports";
+        if (!is_dir($reportsDir)) {
+            mkdir($reportsDir, 0777, true);
+        }
+
+        // lance un composer install pour pouvoir scanner les dependances
+        $process = new Process(["composer", "-d", $projectDir, "install", "--no-interaction", "--no-scripts"]);
+        $process->run();
+
+        // scan les dépendances
+        $process = new Process(["composer", "-d", $projectDir, "audit", "--format=json"]);
+        $process->run();
+        $output = $process->getOutput();
+
+        if (empty($output)) {
+            throw new ProcessFailedException($process);
+        }
+
+        // enregistre dans un json le resultat
+        file_put_contents($reportsDir . "/composer_audit_" . $projectId . ".json", $output);
+    }
+}
