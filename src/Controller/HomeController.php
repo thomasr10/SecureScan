@@ -9,6 +9,7 @@ use App\Service\LanguageDetector;
 use App\Service\ProjectService;
 use App\Service\VulnerabilityNormalise;
 use App\Service\ReportService;
+use App\Service\SemgrepScanService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -45,7 +46,8 @@ final class HomeController extends AbstractController
         LoggerInterface $logger,
         PhpstanAnalyzerService $phpAnalyzerService,
         ComposerAuditService $composerAuditService,
-        NpmAuditService $npmAuditService
+        NpmAuditService $npmAuditService,
+        SemgrepScanService $semgrepScanService
     ): Response {
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
@@ -91,7 +93,7 @@ final class HomeController extends AbstractController
                 $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
                 $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
                 $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
-                
+                $semgrepScanService->scan($projectsDir, $projectId);
                 // NORMALISATION DES ANALYSES + MERGE ANALYSES
                 $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
 
@@ -102,6 +104,7 @@ final class HomeController extends AbstractController
                 
                 // INSERTION RAPPORT EN BDD
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
+
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
@@ -147,7 +150,7 @@ final class HomeController extends AbstractController
                 $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
                 $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
                 $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
-
+                $semgrepScanService->scan($projectsDir, $projectId)
                 // NORMALISATION DES ANALYSES + MERGE ANALYSES
                 $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
 
@@ -158,6 +161,7 @@ final class HomeController extends AbstractController
 
                 // INSERTION RAPPORT EN BDD
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
+
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
