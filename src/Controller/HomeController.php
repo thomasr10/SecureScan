@@ -150,7 +150,7 @@ final class HomeController extends AbstractController
                 $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
                 $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
                 $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
-                $semgrepScanService->scan($projectsDir, $projectId)
+                $semgrepScanService->scan($projectsDir, $projectId);
                 // NORMALISATION DES ANALYSES + MERGE ANALYSES
                 $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
 
