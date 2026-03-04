@@ -10,8 +10,11 @@ class NpmAuditService
     {
     }
 
-    public function audit(string $projectDir, string $projectId)
-    {
+    public function audit(string $projectDir, string $projectId): array
+    {   
+        if (!file_exists($projectDir . '/package.json')) {
+            return [];
+        }
         $reportsDir = $this->params->get("kernel.project_dir") . "/reports/npm_audit_reports";
         if (!is_dir($reportsDir)) {
             mkdir($reportsDir, 0777, true);
@@ -27,12 +30,14 @@ class NpmAuditService
         $process = new Process(['npm', 'audit', '--json', '--prefix', $projectDir]);
         $process->run();
 
-        if (!$process->isSuccessful()) {
-            throw new ProcessFailedException($process);
-        }
+        // if (!$process->isSuccessful()) {
+        //     throw new ProcessFailedException($process);
+        // }
 
         $output = $process->getOutput();
         file_put_contents($reportsDir . "/npm_audit_" . $projectId . ".json", $output);
+
+        return json_decode($output, true) ?? [];
     }
     
 }

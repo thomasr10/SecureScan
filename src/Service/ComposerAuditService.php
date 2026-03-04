@@ -10,8 +10,12 @@ class ComposerAuditService
     {
     }
 
-    public function audit(string $projectDir, string $projectId)
+    public function audit(string $projectDir, string $projectId): array
     {
+        // CHECK SI COMPOSER.JSON
+        if (!file_exists($projectDir . '/composer.json')) {
+            return [];
+        }
         // vérifie que le dossier des reports est bien créer
         $reportsDir = $this->params->get("kernel.project_dir") . "/reports/composer_audit_reports";
         if (!is_dir($reportsDir)) {
@@ -26,12 +30,14 @@ class ComposerAuditService
         $process = new Process(["composer", "-d", $projectDir, "audit", "--format=json"]);
         $process->run();
         $output = $process->getOutput();
-
-        if (empty($output)) {
-            throw new ProcessFailedException($process);
-        }
+        
+        // JE COMMENTE POUR PAS SUPPR
+        // if (empty($output)) {
+        //     throw new ProcessFailedException($process);
+        // }
 
         // enregistre dans un json le resultat
         file_put_contents($reportsDir . "/composer_audit_" . $projectId . ".json", $output);
+        return json_decode($output, true) ?? [];
     }
 }
