@@ -6,12 +6,15 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class PhpstanAnalyzerService
 {
-    public function __construct(private ParameterBagInterface $params)
+    public function __construct(private ParameterBagInterface $params, private RemoveDirectoryService $removeDirectoryService)
     {
     }
     public function analyze(string $repoPath, string $projectId): array
     {
         $reportsDir = $this->params->get("kernel.project_dir") . "/reports/phpstan_reports";
+        if (is_dir($reportsDir)) {
+            $this->removeDirectoryService->removeDirectory($reportsDir);
+        }
         if (!is_dir($reportsDir)) {
             mkdir($reportsDir, 0777, true);
         }

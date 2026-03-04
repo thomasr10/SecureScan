@@ -5,12 +5,15 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class SemgrepScanService{
-    public function __construct(private ParameterBagInterface $params)
+    public function __construct(private ParameterBagInterface $params, private RemoveDirectoryService $removeDirectoryService)
     {
     }
 
     public function scan(string $projectDir, string $projectId){
         $reportsDir = $this->params->get("kernel.project_dir") . "/reports/semgrep_scan_reports";
+        if (is_dir($reportsDir)) {
+            $this->removeDirectoryService->removeDirectory($reportsDir);
+        }
         if (!is_dir($reportsDir)) {
             mkdir($reportsDir, 0777, true);
         }

@@ -9,6 +9,7 @@ use App\Service\LanguageDetector;
 use App\Service\ProjectService;
 use App\Service\VulnerabilityNormalise;
 use App\Service\ReportService;
+use App\Service\RemoveDirectoryService;
 use App\Service\SemgrepScanService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -47,10 +48,15 @@ final class HomeController extends AbstractController
         PhpstanAnalyzerService $phpAnalyzerService,
         ComposerAuditService $composerAuditService,
         NpmAuditService $npmAuditService,
-        SemgrepScanService $semgrepScanService
+        SemgrepScanService $semgrepScanService,
+        RemoveDirectoryService $removeDirectoryService
     ): Response {
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
+        $projectsDir = $this->getParameter('kernel.project_dir') . '/projects/';
+        if (is_dir($projectsDir)) {
+            $removeDirectoryService->removeDirectory($projectsDir);
+        }
 
         // =============================
         // SI URL GIT
