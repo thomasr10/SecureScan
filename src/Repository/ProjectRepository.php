@@ -5,6 +5,7 @@ namespace App\Repository;
 use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use App\Entity\User;
 
 /**
  * @extends ServiceEntityRepository<Project>
@@ -31,13 +32,15 @@ class ProjectRepository extends ServiceEntityRepository
     //        ;
     //    }
 
-    //    public function findOneBySomeField($value): ?Project
-    //    {
-    //        return $this->createQueryBuilder('p')
-    //            ->andWhere('p.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+       public function findOneByNameAndUser(string $name, User $user): ?Project
+       {
+           return $this->createQueryBuilder('p')
+               ->andWhere('p.name = :name')
+               ->setParameter('name', $name)
+               ->andWhere('p.user_id = :user')
+               ->setParameter('user', $user)
+               ->getQuery()
+               ->getOneOrNullResult()
+           ;
+       }
 }
