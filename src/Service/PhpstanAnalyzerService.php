@@ -11,7 +11,7 @@ class PhpstanAnalyzerService
     }
     public function analyze(string $repoPath, string $projectId): void
     {
-        $reportsDir = $this->params->get("kernel.project_dir") . "/phpstan_reports";
+        $reportsDir = $this->params->get("kernel.project_dir") . "/reports/phpstan_reports";
         if (!is_dir($reportsDir)) {
             mkdir($reportsDir, 0777, true);
         }

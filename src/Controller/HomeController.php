@@ -2,6 +2,8 @@
 
 namespace App\Controller;
 
+use App\Service\ComposerAuditService;
+use App\Service\NpmAuditService;
 use App\Service\PhpstanAnalyzerService;
 use App\Service\LanguageDetector;
 use App\Service\ProjectService;
@@ -34,8 +36,13 @@ final class HomeController extends AbstractController
 
     #[Route('/upload', name: 'app_upload', methods: ['POST'])]
 
-    public function upload(Request $request, LoggerInterface $logger, PhpstanAnalyzerService $phpAnalyzerService): Response
-    {
+    public function upload(
+        Request $request,
+        LoggerInterface $logger,
+        PhpstanAnalyzerService $phpAnalyzerService,
+        ComposerAuditService $composerAuditService,
+        NpmAuditService $npmAuditService
+    ): Response {
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
 
@@ -62,7 +69,7 @@ final class HomeController extends AbstractController
                 if (!$process->isSuccessful()) {
                     throw new ProcessFailedException($process);
                 }
-                
+
                 // Création + insertion du projet en base
                 $this->projectService->createProject($projectId, $name, $type, $url);
 
@@ -77,6 +84,8 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('projectsDir', $projectsDir);
 
                 $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAuditService->audit($projectsDir, $projectId);
+                $npmAuditService->audit($projectsDir, $projectId);
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
@@ -120,6 +129,8 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('projectsDir', $projectsDir);
 
                 $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAuditService->audit($projectsDir, $projectId);
+                $npmAuditService->audit($projectsDir, $projectId);
 
                 // return $this->redirectToRoute('app_home');
             } catch (\Throwable $e) {
@@ -127,7 +138,7 @@ final class HomeController extends AbstractController
                 return $this->redirectToRoute('app_home');
             }
         }
-        
+
         return $this->redirectToRoute('app_home');
     }
 }
