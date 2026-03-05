@@ -187,7 +187,15 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('analysisArray', $analysisArray);
 
                 // SCORE A MODIFIER
-                $score = 80;
+                $score = 100;
+
+                foreach ($analysisArray as $vulnData) {
+                    if ($vulnData['severity'] === 'medium' && $score > 0) {
+                        $score -= 5;
+                    } elseif ($vulnData['severity'] === 'low' && $score > 0) {
+                        $score -= 1;
+                    }
+                }
                 // STATUS A MODIFIER
                 $status = 'done';
                 
