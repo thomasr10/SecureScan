@@ -53,12 +53,21 @@ final class HomeController extends AbstractController
     public function dashboard(Request $request): Response
     {
         $analysisArray = $request->getSession()->get('analysisArray');
+        $semgrepNormalized = $request->getSession()->get('semgrepNormalized');
+        $score = 100;
 
-        $score = 80;
+        foreach ($analysisArray as  $vulnData) {
+            if ($vulnData['severity'] === 'medium' && $score > 0) {
+                $score -= 5;
+            } elseif($vulnData['severity'] === 'low' && $score > 0){
+                $score -= 1;
+            }
+        }
         $status = 'done';
 
         return $this->render('home/dashboard.html.twig', [
             'analysisArray' => $analysisArray,
+            'semgrepNormalized'=> $semgrepNormalized,
             'score' => $score,
             'status' => $status,
         ]);

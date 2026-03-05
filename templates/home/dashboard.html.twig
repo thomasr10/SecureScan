@@ -9,17 +9,33 @@
 			{{status}}</h2>
 	</div>
 	<div style="padding:40px;">
-		{% if analysisArray is not empty %}
-			{% for vuln in analysisArray %}
-				<h4>{{ vuln['source'] }}</h4>
-				<p>{{ vuln['severity'] }}</p>
-				<p>{{ vuln['file'] }}</p>
-				<p>{{ vuln['line'] }}</p>
+		{% if analysisArray is not empty or semgrepNormalized is not empty %}
+			{% if analysisArray is not empty %}
+				{% for vuln in analysisArray %}
+					{# {% if vuln['source'] != 'phpstan' %} #}
+						<h4>{{ vuln['source'] }}</h4>
+						<p>{{ vuln['severity'] }}</p>
+						<p>{{ vuln['file'] }}</p>
+						<p>{{ vuln['line'] }}</p>
+						<p>{{ vuln['message'] }}</p>
+					{# {% endif %} #}
+				{% endfor %}
+			{% endif %}
+			{% if semgrepNormalized is not empty %}
+				{% for vuln in semgrepNormalized %}
+					<h4>{{ vuln['tool'] }}</h4>
+					<p>{{ vuln['severity'] }}</p>
+					<p>{{ vuln['ruleId'] }}</p>
+					<p>{{ vuln['file'] }}</p>
+					{% for owasp in vuln['owasp'] %}
+						<p>{{ owasp }}</p>
+					{% endfor %}
+					<p>start line:</p>
+					{{ vuln['startLine'] }}</p>
 				<p>{{ vuln['message'] }}</p>
 			{% endfor %}
-		{% else %}
-			<p>Aucune vulnérabilité détectée.</p>
 		{% endif %}
-	</div>
-
-{% endblock %}
+	{% else %}
+		<p>Aucune vulnérabilité détectée.</p>
+	{% endif %}
+</div>{% endblock %}
