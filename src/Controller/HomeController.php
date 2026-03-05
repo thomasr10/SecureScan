@@ -123,10 +123,6 @@ final class HomeController extends AbstractController
                 // INSERTION RAPPORT EN BDD
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
-
-                // IMPORTANT : après upload → page scanning
-                return $this->redirectToRoute('app_scanning');
-
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload Git: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
@@ -179,15 +175,12 @@ final class HomeController extends AbstractController
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
 
-                //  IMPORTANT : après upload → page scanning
-                return $this->redirectToRoute('app_scanning');
-
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload ZIP: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
             }
         }
-
-        return $this->redirectToRoute('app_home');
+        //  IMPORTANT : après upload → page scanning
+        return $this->redirectToRoute('app_scanning');
     }
 }
