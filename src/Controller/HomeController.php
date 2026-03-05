@@ -2,9 +2,15 @@
 
 namespace App\Controller;
 
+use App\Service\ComposerAuditService;
+use App\Service\NpmAuditService;
 use App\Service\PhpstanAnalyzerService;
 use App\Service\LanguageDetector;
 use App\Service\ProjectService;
+use App\Service\VulnerabilityNormalise;
+use App\Service\ReportService;
+use App\Service\RemoveDirectoryService;
+use App\Service\SemgrepScanService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,7 +26,9 @@ final class HomeController extends AbstractController
 {
     public function __construct(
         private LanguageDetector $languageDetector,
-        private ProjectService $projectService
+        private ProjectService $projectService,
+        private VulnerabilityNormalise $vulnerabilityNormalise,
+        private ReportService $reportService
     ) {}
 
     // Landing accessible à tous (comme ta maquette)
@@ -37,6 +45,7 @@ final class HomeController extends AbstractController
         return $this->render('home/scanning.html.twig');
     }
 
+
     // Dashboard (placeholder pour l’instant)
     #[Route('/dashboard', name: 'app_dashboard', methods: ['GET'])]
     public function dashboard(): Response
@@ -47,10 +56,21 @@ final class HomeController extends AbstractController
     // Upload protégé : faut être connecté
     #[IsGranted("ROLE_USER")]
     #[Route('/upload', name: 'app_upload', methods: ['POST'])]
-    public function upload(Request $request, LoggerInterface $logger, PhpstanAnalyzerService $phpAnalyzerService): Response
-    {
+    public function upload(
+        Request $request,
+        LoggerInterface $logger,
+        PhpstanAnalyzerService $phpAnalyzerService,
+        ComposerAuditService $composerAuditService,
+        NpmAuditService $npmAuditService,
+        SemgrepScanService $semgrepScanService,
+        RemoveDirectoryService $removeDirectoryService
+    ): Response {
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
+        $projectsDir = $this->getParameter('kernel.project_dir') . '/projects/';
+        if (is_dir($projectsDir)) {
+            $removeDirectoryService->removeDirectory($projectsDir);
+        }
 
         // =============================
         // SI URL GIT
@@ -76,7 +96,9 @@ final class HomeController extends AbstractController
                     throw new ProcessFailedException($process);
                 }
 
-                $this->projectService->createProject($projectId, $name, $type, $url);
+
+                // Création + insertion du projet en base
+                $project = $this->projectService->createProject($projectId, $name, $type, $url);
 
                 $languageInfo = $this->languageDetector->detect($projectsDir);
                 $logger->info('Langage détecté', $languageInfo);
@@ -84,7 +106,22 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
-                $phpAnalyzerService->analyze($projectsDir, $projectId);
+                // ON RECUPERE LES FICHIERS D'ANALYSE
+                $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
+                $semgrepScanService->scan($projectsDir, $projectId);
+                // NORMALISATION DES ANALYSES + MERGE ANALYSES
+                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+
+                // SCORE A MODIFIER
+                $score = 80;
+                // STATUS A MODIFIER
+                $status = 'done';
+                
+                // INSERTION RAPPORT EN BDD
+                $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
+
 
                 // IMPORTANT : après upload → page scanning
                 return $this->redirectToRoute('app_scanning');
@@ -116,12 +153,8 @@ final class HomeController extends AbstractController
                 $zipProject->extractTo($projectsDir);
                 $zipProject->close();
 
-                $this->projectService->createProject(
-                    $projectId,
-                    $name,
-                    $type,
-                    hash_file('sha256', $zip->getPathname())
-                );
+                // Création + insertion du projet en base
+                $project = $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
 
                 $languageInfo = $this->languageDetector->detect($projectsDir);
                 $logger->info('Langage détecté', $languageInfo);
@@ -129,7 +162,21 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
-                $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
+                $semgrepScanService->scan($projectsDir, $projectId);
+                // NORMALISATION DES ANALYSES + MERGE ANALYSES
+                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+
+                // SCORE A MODIFIER
+                $score = 80;
+                // STATUS A MODIFIER
+                $status = 'done';
+
+                // INSERTION RAPPORT EN BDD
+                $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
+
 
                 //  IMPORTANT : après upload → page scanning
                 return $this->redirectToRoute('app_scanning');
