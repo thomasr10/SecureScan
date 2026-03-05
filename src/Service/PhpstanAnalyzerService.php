@@ -11,6 +11,11 @@ class PhpstanAnalyzerService
     }
     public function analyze(string $repoPath, string $projectId): array
     {
+        // Vérifier que le répertoire existe
+        if (!is_dir($repoPath)) {
+            throw new \Exception("Project directory does not exist: $repoPath");
+        }
+        
         $reportsDir = $this->params->get("kernel.project_dir") . "/reports/phpstan_reports";
         if (is_dir($reportsDir)) {
             $this->removeDirectoryService->removeDirectory($reportsDir);

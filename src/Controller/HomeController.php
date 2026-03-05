@@ -8,10 +8,11 @@ use App\Service\NpmAuditService;
 use App\Service\PhpstanAnalyzerService;
 use App\Service\ProjectService;
 use App\Service\SemgrepResultNormalizer;
-use App\Service\VulnerabilityNormalise;
 use App\Service\ReportService;
 use App\Service\RemoveDirectoryService;
 use App\Service\SemgrepScanService;
+use App\Service\SecurityToolParserService;
+use App\Service\OwaspMappingService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -28,8 +29,9 @@ final class HomeController extends AbstractController
     public function __construct(
         private LanguageDetector $languageDetector,
         private ProjectService $projectService,
-        private VulnerabilityNormalise $vulnerabilityNormalise,
-        private ReportService $reportService
+        private ReportService $reportService,
+        private SecurityToolParserService $securityToolParser,
+        private OwaspMappingService $owaspMapper
     ) {}
 
     // Landing accessible à tous (comme ta maquette)
@@ -80,8 +82,15 @@ final class HomeController extends AbstractController
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
         $projectsDir = $this->getParameter('kernel.project_dir') . '/projects/';
+        
+        // Créer le répertoire s'il n'existe pas
+        if (!is_dir($projectsDir)) {
+            mkdir($projectsDir, 0777, true);
+        }
+        
         if (is_dir($projectsDir)) {
             $removeDirectoryService->removeDirectory($projectsDir);
+            mkdir($projectsDir, 0777, true);
         }
 
         // =============================
@@ -89,6 +98,11 @@ final class HomeController extends AbstractController
         // =============================
         if ($url && !$zip) {
             $url = trim($url);
+            
+            // Extraire l'URL si l'utilisateur a collé "git clone https://..."
+            if (str_starts_with($url, 'git clone ')) {
+                $url = trim(substr($url, strlen('git clone ')));
+            }
 
             if (!str_ends_with($url, '.git')) {
                 return $this->redirectToRoute('app_home');
@@ -102,10 +116,16 @@ final class HomeController extends AbstractController
                 $projectsDir = $this->getParameter('kernel.project_dir') . '/projects/' . $projectId;
 
                 $process = new Process(['git', 'clone', $url, $projectsDir]);
+                $process->setTimeout(300); // 5 minutes pour cloner les gros repos
                 $process->run();
 
                 if (!$process->isSuccessful()) {
                     throw new ProcessFailedException($process);
+                }
+                
+                // Vérifier que le répertoire a bien été créé
+                if (!is_dir($projectsDir)) {
+                    throw new \Exception("Git clone failed: directory not created at $projectsDir");
                 }
 
 
@@ -120,31 +140,77 @@ final class HomeController extends AbstractController
 
                 // ON RECUPERE LES FICHIERS D'ANALYSE
                 $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
-                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
-                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
-                $semgrepRaw = $semgrepScanService->scan($projectsDir, $projectId);
-                $semgrepNormalized = $semgrepNormalizer->normalize($semgrepRaw, $projectId);
-
-                // Pour debug rapide (sans UI): on stocke en session
-                $request->getSession()->set('semgrepNormalized', $semgrepNormalized);
-
-                if ($request->getSession()->has('analysisArray')){
-                    $request->getSession()->remove('analysisArray');
+                
+                $composerAudit = [];
+                try {
+                    $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                } catch (\Exception $e) {
+                    $logger->warning('Composer audit skipped (Git): ' . $e->getMessage());
                 }
-                // NORMALISATION DES ANALYSES + MERGE ANALYSES
-                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
-                $request->getSession()->set('analysisArray', $analysisArray);
+                
+                $npmAudit = [];
+                try {
+                    $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
+                } catch (\Exception $e) {
+                    $logger->warning('npm audit skipped (Git): ' . $e->getMessage());
+                }
+                
+                try {
+                    $semgrepScanService->scan($projectsDir, $projectId);
+                } catch (\Exception $e) {
+                    $logger->warning('Semgrep skipped (Git): ' . $e->getMessage());
+                }
+                
+                // PARSING ET MAPPAGE OWASP AUTOMATIQUE
+                $vulnerabilities = [];
+                try {
+                    if (!empty($phpStan)) {
+                        $vulnsPHPStan = $this->securityToolParser->parsePhpstanOutput($phpStan);
+                        $vulnerabilities = array_merge($vulnerabilities, $vulnsPHPStan);
+                        $logger->info('PHPStan: ' . count($vulnsPHPStan) . ' vulnérabilités détectées');
+                    }
+                    
+                    if (!empty($composerAudit)) {
+                        $vulnsComposer = $this->securityToolParser->parseComposerAuditOutput(json_encode($composerAudit));
+                        $vulnerabilities = array_merge($vulnerabilities, $vulnsComposer);
+                        $logger->info('Composer Audit: ' . count($vulnsComposer) . ' vulnérabilités détectées');
+                    }
+                    
+                    if (!empty($npmAudit)) {
+                        $vulnsNpm = $this->securityToolParser->parseNpmAuditOutput(json_encode($npmAudit));
+                        $vulnerabilities = array_merge($vulnerabilities, $vulnsNpm);
+                        $logger->info('npm Audit: ' . count($vulnsNpm) . ' vulnérabilités détectées');
+                    }
+                    
+                    $logger->info('Total vulnérabilités détectées et mappées: ' . count($vulnerabilities));
+                } catch (\Exception $e) {
+                    $logger->error('Erreur parsing vulnérabilités: ' . $e->getMessage());
+                }
 
-                // SCORE A MODIFIER
-                $score = 80;
-                // STATUS A MODIFIER
+                // SCORE ET STATUS
+                $score = $this->calculateSecurityScore(count($vulnerabilities));
                 $status = 'done';
                 
                 // INSERTION RAPPORT EN BDD
+                $analysisArray = array_map(function($vuln) {
+                    return [
+                        'title' => $vuln->getTitle(),
+                        'severity' => $vuln->getSeverity(),
+                        'tool' => $vuln->getToolName(),
+                        'file' => $vuln->getFilePath(),
+                        'line' => $vuln->getLineNumber(),
+                        'owasp' => $vuln->getOwaspCategory()?->getCode() ?? 'Unknown',
+                        'confidence' => $vuln->getConfidenceScore(),
+                    ];
+                }, $vulnerabilities);
+                
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
+                $this->addFlash('success', '✅ Analyse terminée! ' . count($vulnerabilities) . ' vulnérabilité(s) détectée(s).');
+                return $this->redirectToRoute('app_scanning');
             } catch (\Throwable $e) {
-                $logger->error('Erreur upload Git: ' . $e->getMessage());
+                $logger->error('Erreur upload GIT: ' . $e->getMessage());
+                $this->addFlash('error', '❌ Erreur lors de l\'analyse: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
             }
         }
@@ -169,6 +235,11 @@ final class HomeController extends AbstractController
 
                 $zipProject->extractTo($projectsDir);
                 $zipProject->close();
+                
+                // Vérifier que l'extraction a réussi
+                if (!is_dir($projectsDir) || count(glob("$projectsDir/*")) === 0) {
+                    throw new \Exception("ZIP extraction failed: directory is empty or doesn't exist");
+                }
 
                 // Création + insertion du projet en base
                 $project = $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
@@ -180,30 +251,77 @@ final class HomeController extends AbstractController
                 $request->getSession()->set('projectsDir', $projectsDir);
 
                 $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
-                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
-                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
-                $semgrepScanService->scan($projectsDir, $projectId);
-                // Semgrep: stocker + normaliser
-                $semgrepRaw = $semgrepScanService->scan($projectsDir, $projectId);
-                $semgrepNormalized = $semgrepNormalizer->normalize($semgrepRaw, $projectId);
-
-                // Pour debug rapide (sans UI): on stocke en session
-                $request->getSession()->set('semgrepNormalized', $semgrepNormalized);
                 
-                // NORMALISATION DES ANALYSES + MERGE ANALYSES
-                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
-                $request->getSession()->set('analysisArray', $analysisArray);
+                $composerAudit = [];
+                try {
+                    $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                } catch (\Exception $e) {
+                    $logger->warning('Composer audit skipped (ZIP): ' . $e->getMessage());
+                }
+                
+                $npmAudit = [];
+                try {
+                    $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
+                } catch (\Exception $e) {
+                    $logger->warning('npm audit skipped (ZIP): ' . $e->getMessage());
+                }
+                
+                try {
+                    $semgrepScanService->scan($projectsDir, $projectId);
+                } catch (\Exception $e) {
+                    $logger->warning('Semgrep skipped (ZIP): ' . $e->getMessage());
+                }
+                
+                // PARSING ET MAPPAGE OWASP AUTOMATIQUE
+                $vulnerabilities = [];
+                try {
+                    if (!empty($phpStan)) {
+                        $vulnsPHPStan = $this->securityToolParser->parsePhpstanOutput($phpStan);
+                        $vulnerabilities = array_merge($vulnerabilities, $vulnsPHPStan);
+                        $logger->info('PHPStan: ' . count($vulnsPHPStan) . ' vulnérabilités détectées');
+                    }
+                    
+                    if (!empty($composerAudit)) {
+                        $vulnsComposer = $this->securityToolParser->parseComposerAuditOutput(json_encode($composerAudit));
+                        $vulnerabilities = array_merge($vulnerabilities, $vulnsComposer);
+                        $logger->info('Composer Audit: ' . count($vulnsComposer) . ' vulnérabilités détectées');
+                    }
+                    
+                    if (!empty($npmAudit)) {
+                        $vulnsNpm = $this->securityToolParser->parseNpmAuditOutput(json_encode($npmAudit));
+                        $vulnerabilities = array_merge($vulnerabilities, $vulnsNpm);
+                        $logger->info('npm Audit: ' . count($vulnsNpm) . ' vulnérabilités détectées');
+                    }
+                    
+                    $logger->info('Total vulnérabilités détectées et mappées: ' . count($vulnerabilities));
+                } catch (\Exception $e) {
+                    $logger->error('Erreur parsing vulnérabilités: ' . $e->getMessage());
+                }
 
-                // SCORE A MODIFIER
-                $score = 80;
-                // STATUS A MODIFIER
+                // SCORE ET STATUS
+                $score = $this->calculateSecurityScore(count($vulnerabilities));
                 $status = 'done';
-
+                
                 // INSERTION RAPPORT EN BDD
+                $analysisArray = array_map(function($vuln) {
+                    return [
+                        'title' => $vuln->getTitle(),
+                        'severity' => $vuln->getSeverity(),
+                        'tool' => $vuln->getToolName(),
+                        'file' => $vuln->getFilePath(),
+                        'line' => $vuln->getLineNumber(),
+                        'owasp' => $vuln->getOwaspCategory()?->getCode() ?? 'Unknown',
+                        'confidence' => $vuln->getConfidenceScore(),
+                    ];
+                }, $vulnerabilities);
+
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
+                $this->addFlash('success', '✅ Analyse terminée! ' . count($vulnerabilities) . ' vulnérabilité(s) détectée(s).');
+                return $this->redirectToRoute('app_scanning');
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload ZIP: ' . $e->getMessage());
+                $this->addFlash('error', '❌ Erreur lors de l\'analyse: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
             }
         }
@@ -232,5 +350,17 @@ final class HomeController extends AbstractController
             'normalized_count' => count($normalized),
             'normalized_preview' => array_slice($normalized, 0, 5),
         ]);
+    }
+
+    /**
+     * Calcule un score de sécurité basé sur le nombre de vulnérabilités
+     * 
+     * Score: 100 - (nombre_vulnérabilités * 5)
+     * Minimum: 0, Maximum: 100
+     */
+    private function calculateSecurityScore(int $vulnerabilityCount): int
+    {
+        $score = 100 - ($vulnerabilityCount * 5);
+        return max(0, min(100, $score));
     }
 }

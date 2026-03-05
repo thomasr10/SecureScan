@@ -293,6 +293,61 @@ class SecurityToolParserService
     }
 
     /**
+     * Parser la sortie JSON de PHPStan
+     * 
+     * PHPStan est un analyseur statique PHP qui détecte les erreurs de type et autres problèmes de code.
+     * 
+     * Format attendu:
+     * {
+     *   "totals": { "errors": 2 },
+     *   "files": {
+     *     "src/Service/MyService.php": {
+     *       "messages": [
+     *         {
+     *           "message": "Variable $foo is not defined",
+     *           "line": 42,
+     *           "ignorable": false
+     *         }
+     *       ]
+     *     }
+     *   }
+     * }
+     * 
+     * @param string $jsonOutput Format array JSON décidé (pas JSON string)
+     * @return array Tableau de Vulnerability mappées et persistées
+     */
+    public function parsePhpstanOutput(string|array $jsonOutput): array
+    {
+        // Si c'est un string, parse-le; sinon c'est déjà un array
+        $data = is_string($jsonOutput) ? json_decode($jsonOutput, true) : $jsonOutput;
+        $vulnerabilities = [];
+
+        foreach ($data['files'] ?? [] as $filePath => $fileData) {
+            foreach ($fileData['messages'] ?? [] as $message) {
+                $vuln = new Vulnerability();
+                $vuln->setTitle('PHPStan: ' . ($message['message'] ?? 'Code Quality Issue'));
+                $vuln->setDescription($message['message'] ?? 'PHPStan detection');
+                // PHPStan détecte généralement des problèmes medium
+                $vuln->setSeverity('medium');
+                $vuln->setToolName('phpstan');
+                $vuln->setFilePath($filePath);
+                $vuln->setLineNumber($message['line'] ?? null);
+                $vuln->setRawData($message);
+
+                // Mappe automatiquement à OWASP
+                $this->mappingService->mapVulnerability($vuln);
+                $this->entityManager->persist($vuln);
+                $vulnerabilities[] = $vuln;
+            }
+        }
+
+        if (!empty($vulnerabilities)) {
+            $this->entityManager->flush();
+        }
+        return $vulnerabilities;
+    }
+
+    /**
      * Mappe la sévérité Semgrep à nos niveaux standards
      * 
      * Semgrep utilise: CRITICAL, ERROR, WARNING, NOTE, INFO

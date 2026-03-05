@@ -2,16 +2,21 @@
 namespace App\Service;
 use Symfony\Component\Process\Process;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
-use Symfony\Component\Process\Exception\ProcessFailedException;
+use Psr\Log\LoggerInterface;
 
 class NpmAuditService
 {
-    public function __construct(private ParameterBagInterface $params, private RemoveDirectoryService $removeDirectoryService)
+    public function __construct(private ParameterBagInterface $params, private RemoveDirectoryService $removeDirectoryService, private LoggerInterface $logger)
     {
     }
 
     public function audit(string $projectDir, string $projectId): array
     {
+        // Vérifier que le répertoire existe
+        if (!is_dir($projectDir)) {
+            throw new \Exception("Project directory does not exist: $projectDir");
+        }
+        
         if (!file_exists($projectDir . '/package.json')) {
             return [];
         }
@@ -24,13 +29,16 @@ class NpmAuditService
         }
 
         $process = new Process(['npm', 'install', '--prefix', $projectDir]);
+        $process->setTimeout(300); // 5 minutes pour installer les dépendances npm
         $process->run();
 
         if (!$process->isSuccessful()) {
-            throw new ProcessFailedException($process);
+            // npm install peut échouer (workspaces, etc) mais on peut continuer avec audit
+            $this->logger->warning('npm install failed but continuing: ' . $process->getErrorOutput());
         }
 
         $process = new Process(['npm', 'audit', '--json', '--prefix', $projectDir]);
+        $process->setTimeout(300); // 5 minutes pour auditer
         $process->run();
 
         // if (!$process->isSuccessful()) {
