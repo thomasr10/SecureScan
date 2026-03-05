@@ -6,19 +6,17 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
-class SemgrepScanService
-{
-    public function __construct(private ParameterBagInterface $params)
+class SemgrepScanService{
+    public function __construct(private ParameterBagInterface $params, private RemoveDirectoryService $removeDirectoryService)
     {
     }
 
-    /**
-     * Lance Semgrep et retourne le résultat décodé (array).
-     * Écrit aussi le JSON dans /reports/semgrep_scan_reports
-     */
-    public function scan(string $projectDir, string $projectId): array
-    {
-        $reportsDir = $this->params->get('kernel.project_dir') . '/reports/semgrep_scan_reports';
+    public function scan(string $projectDir, string $projectId){
+        $reportsDir = $this->params->get("kernel.project_dir") . "/reports/semgrep_scan_reports";
+        if (is_dir($reportsDir)) {
+            $this->removeDirectoryService->removeDirectory($reportsDir);
+        }
+
         if (!is_dir($reportsDir)) {
             mkdir($reportsDir, 0777, true);
         }

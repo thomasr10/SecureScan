@@ -1,21 +1,182 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}SecureScan{% endblock %}
+{% block title %}SecureScan — Analyse de sécurité{% endblock %}
 
 {% block body %}
 
-{# TEST INPUT POUR RECUPERER LES REPO ---- A REFAIRE AU PROPRE#}
-{# POUR GERER TOUT SUR LA MEME PAGE : UTILISER LES STATUS #}
+<!-- ── Bouton connexion / menu utilisateur (haut-droite) ── -->
+<div class="top-auth">
+  {% if app.user %}
+    <div class="user-menu-wrap" id="user-menu-wrap">
+      <button class="user-menu-btn" id="user-menu-btn"
+              onclick="toggleUserDropdown()" aria-expanded="false" type="button">
+        <span class="user-avatar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </span>
+        <span id="user-display-name">{{ app.user.email }}</span>
+        <svg class="user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
 
-<form action="{{ path('app_upload') }}" method="post" enctype="multipart/form-data">
-    <label for="project-url">URL GitHub</label>
-    <input type="text" id="project-url" name="project_url" placeholder="https://github.com/username/repo">
+      <div class="user-dropdown" id="user-dropdown">
+        <a href="{{ path('app_home') }}">Accueil</a>
+        <hr />
+        <a href="{{ path('app_logout') }}" class="btn-logout">Se déconnecter</a>
+      </div>
+    </div>
+  {% else %}
+    <div id="auth-btn-wrap">
+      <button class="btn-connexion" type="button" onclick="openAuthModalLocal('login')">Connexion</button>
+    </div>
+  {% endif %}
+</div>
 
-    <label for="project-zip">Ou .zip</label>
-    <input type="file" id="project-zip" name="project_zip" accept=".zip">
+<!-- ── Page principale ── -->
+<div class="landing-bg">
+  <div class="landing-glow">
+    <div class="glow-blue"></div>
+    <div class="glow-green"></div>
+    <div class="grid-pattern"></div>
+  </div>
 
-    <button type="submit">Lancer l'analyse</button>
-</form>
+  <div class="landing-inner">
 
+    <div class="landing-logo-wrap">
+      <div class="landing-shield-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <h1 class="landing-title">SecureScan</h1>
+      <p class="landing-subtitle">Analyse automatique de la sécurité et de la qualité du code</p>
+    </div>
+
+    <div class="form-card">
+      <form id="scan-form"
+            action="{{ path('app_upload') }}"
+            method="post"
+            enctype="multipart/form-data">
+
+        <div class="tab-switcher" role="tablist">
+          <button type="button" class="tab-btn active" id="tab-url"
+                  onclick="switchTab('url')" role="tab" aria-selected="true">
+            URL du dépôt Git
+          </button>
+
+          <button type="button" class="tab-btn" id="tab-file"
+                  onclick="switchTab('file')" role="tab" aria-selected="false">
+            Téléverser un ZIP
+          </button>
+        </div>
+
+        <div id="input-url">
+          <input
+            type="text"
+            class="form-input"
+            id="repo-url"
+            name="project_url"
+            placeholder="https://github.com/username/repository.git"
+            oninput="updateSubmitBtn()"
+          />
+        </div>
+
+        <div id="input-file" style="display:none">
+          <label class="upload-zone" id="upload-zone">
+            <div>
+              <p id="file-label">Cliquez pour sélectionner un fichier ZIP</p>
+            </div>
+            <input type="file" accept=".zip" id="file-input" name="project_zip" onchange="handleFile(event)" />
+          </label>
+        </div>
+
+        <button type="submit" class="btn-primary" id="submit-btn" disabled>
+          Lancer l'analyse
+        </button>
+
+      </form>
+    </div>
+
+    <p class="landing-footer">Analyse sécurisée avec Semgrep, npm audit, Bandit et plus</p>
+  </div>
+</div>
+
+<script>
+let currentInputType = 'url';
+
+function switchTab(type) {
+  currentInputType = type;
+  document.getElementById('tab-url')?.classList.toggle('active', type === 'url');
+  document.getElementById('tab-file')?.classList.toggle('active', type === 'file');
+  document.getElementById('input-url').style.display = type === 'url' ? '' : 'none';
+  document.getElementById('input-file').style.display = type === 'file' ? '' : 'none';
+  updateSubmitBtn();
+}
+
+function handleFile(e) {
+  const f = e.target.files?.[0];
+  if (f) document.getElementById('file-label').textContent = f.name;
+  updateSubmitBtn();
+}
+
+function updateSubmitBtn() {
+  const repo = document.getElementById('repo-url');
+  const file = document.getElementById('file-input');
+  const btn  = document.getElementById('submit-btn');
+  if (!btn) return;
+
+  const urlOk  = currentInputType === 'url'  && repo && repo.value.trim() !== '';
+  const fileOk = currentInputType === 'file' && file && file.files.length > 0;
+
+  btn.disabled = !(urlOk || fileOk);
+}
+
+function openAuthModalLocal(tab) {
+  // 1) si l’API globale existe => nickel
+  if (window.SecureScanAuth && typeof window.SecureScanAuth.openModal === 'function') {
+    window.SecureScanAuth.openModal(tab || 'login');
+    return;
+  }
+
+  // 2) sinon on tente d’ouvrir la modale "à la main" (debug)
+  const modal = document.getElementById('auth-modal');
+  if (!modal) {
+    alert("ERREUR: #auth-modal n'existe pas dans la page. Donc base.html.twig n'injecte pas la modale (ou mauvais layout).");
+    return;
+  }
+
+  // si elle existe : on l’ouvre brut
+  modal.classList.add('open');
+}
+
+function handleSubmit(e, isLoggedIn) {
+  if (!isLoggedIn) {
+    e.preventDefault();
+    openAuthModalLocal('login');
+    return false;
+  }
+  return true;
+}
+
+function toggleUserDropdown() {
+  const dd  = document.getElementById('user-dropdown');
+  const btn = document.getElementById('user-menu-btn');
+  if (!dd || !btn) return;
+  const open = dd.classList.toggle('open');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('user-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('user-dropdown')?.classList.remove('open');
+    document.getElementById('user-menu-btn')?.setAttribute('aria-expanded', 'false');
+  }
+});
+
+document.addEventListener('DOMContentLoaded', updateSubmitBtn);
+</script>
 
 {% endblock %}

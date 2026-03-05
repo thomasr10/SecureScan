@@ -13,13 +13,16 @@ use Symfony\Component\Security\Http\Authentication\AuthenticationUtils;
 
 class SecurityController extends AbstractController
 {
-    #[Route(path: '/login', name: 'app_login')]
+    #[Route(path: '/login', name: 'app_login', methods: ['GET','POST'])]
     public function login(AuthenticationUtils $authenticationUtils): Response
     {
-        // get the login error if there is one
-        $error = $authenticationUtils->getLastAuthenticationError();
+        // si déjà connecté => home
+        if ($this->getUser()) {
+            return $this->redirectToRoute('app_home');
+        }
 
-        // last username entered by the user
+        // si erreur, Symfony revient ici
+        $error = $authenticationUtils->getLastAuthenticationError();
         $lastUsername = $authenticationUtils->getLastUsername();
 
         return $this->render('security/login.html.twig', [
@@ -28,48 +31,48 @@ class SecurityController extends AbstractController
         ]);
     }
 
-    #[Route(path: '/register', name: 'app_register')]
-    public function register(Request $request, EntityManagerInterface $entityManager, UserPasswordHasherInterface $hasher): Response
-    {
+    #[Route(path: '/register', name: 'app_register', methods: ['GET','POST'])]
+    public function register(
+        Request $request,
+        EntityManagerInterface $entityManager,
+        UserPasswordHasherInterface $hasher
+    ): Response {
         $error = null;
 
-        // si le formulaire est valider, lance le processus d'insription
         if ($request->isMethod('POST')) {
-            // récupère les informations entrer dans le formulaire
-            $email = $request->request->get('email');
-            $password = $request->request->get('password');
+            $email = (string) $request->request->get('email');
+            $password = (string) $request->request->get('password');
 
-            // vérifie si un utilisateur n'existe pas déjà avec cet email
-            $existingUser = $entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
-            if ($existingUser !== null) {
-                // l'email est déjà pris : afficher une erreur
-                $error = 'Un compte existe déjà avec cet email';
+            if (!$email || !$password) {
+                $error = 'Email et mot de passe requis';
             } else {
-                $user = new User();
-                $user->setEmail($email);
-                $user->setRoles(['ROLE_USER']);
+                $existingUser = $entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
+                if ($existingUser) {
+                    $error = 'Un compte existe déjà avec cet email';
+                } else {
+                    $user = new User();
+                    $user->setEmail($email);
+                    $user->setRoles(['ROLE_USER']);
 
-                // encrypte le mot de passe avant de l'ajouter au user
-                $hashedPassword = $hasher->hashPassword($user, $password);
-                $user->setPassword($hashedPassword);
+                    $hashedPassword = $hasher->hashPassword($user, $password);
+                    $user->setPassword($hashedPassword);
 
-                // enregistre le nouvel utilisateur et redirige vers la page de connexion
-                $entityManager->persist($user);
-                $entityManager->flush();
+                    $entityManager->persist($user);
+                    $entityManager->flush();
 
-                return $this->redirectToRoute('app_login');
+                    return $this->redirectToRoute('app_login');
+                }
             }
         }
 
-        // recharge la page d'inscription en cas d'erreur
         return $this->render('security/register.html.twig', [
             'error' => $error,
         ]);
     }
 
-    #[Route(path: '/logout', name: 'app_logout')]
+    #[Route(path: '/logout', name: 'app_logout', methods: ['GET'])]
     public function logout(): void
     {
-        throw new \LogicException('This method can be blank - it will be intercepted by the logout key on your firewall.');
+        throw new \LogicException('This method can be blank - it will be intercepted by Symfony.');
     }
 }

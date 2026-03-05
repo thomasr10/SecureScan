@@ -1,28 +1,184 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="UTF-8">
-		<title>
-			{% block title %}Welcome!
-			{% endblock %}
-		</title>
-		<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22><text y=%221.2em%22 font-size=%2296%22>⚫️</text><text y=%221.3em%22 x=%220.2em%22 font-size=%2276%22 fill=%22%23fff%22>sf</text></svg>"> {% block stylesheets %}{% endblock %}
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}SecureScan{% endblock %}</title>
 
-        {% block javascripts %}
-            {% block importmap %}{{ importmap('app') }}{% endblock %}
-        {% endblock %}
-    </head>
-	<body>
-		{% if app.user %}
-			<nav>
-				<a href="{{ path('app_logout') }}">Déconnexion</a>
-			</nav>
-		{% else %}
-			<nav>
-				<a href="{{ path('app_login') }}">Connexion</a>
-				<a href="{{ path('app_register') }}">Inscription</a>
-			</nav>
-		{% endif %}
-		{% block body %}{% endblock %}
-	</body>
+  {% block stylesheets %}{% endblock %}
+
+  {% block javascripts %}
+    {{ importmap('app') }}
+  {% endblock %}
+</head>
+
+<body>
+  {% block body %}{% endblock %}
+
+  {# ===== MODALE AUTH (UNE SEULE FOIS) ===== #}
+  <div class="modal-overlay" id="auth-modal" role="dialog" aria-modal="true" aria-label="Authentification">
+    <div class="modal-box">
+
+      <div class="auth-modal-logo">
+        <div class="mini-shield">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <span>SecureScan</span>
+
+        <button class="modal-close" style="margin-left:auto" type="button" data-auth-close>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="auth-tabs" id="auth-tabs">
+        <button class="auth-tab active" id="tab-login-btn" type="button" data-auth-tab="login">Se connecter</button>
+        <button class="auth-tab" id="tab-register-btn" type="button" data-auth-tab="register">Créer un compte</button>
+      </div>
+
+      {# LOGIN #}
+      <div class="auth-screen active" id="screen-login">
+        <form class="auth-form" method="post" action="{{ path('app_login') }}">
+          <div class="input-group">
+            <input type="email" class="auth-input" name="_username" placeholder="Adresse e-mail" autocomplete="email" required />
+          </div>
+
+          <div class="input-group">
+            <input type="password" class="auth-input" id="login-password" name="_password" placeholder="Mot de passe" autocomplete="current-password" required />
+            <button type="button" class="toggle-pw" data-toggle-pw="login-password">👁</button>
+          </div>
+
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+
+          <a href="#" class="forgot-link" data-auth-forgot>Mot de passe oublié ?</a>
+
+          <button type="submit" class="btn-auth">Se connecter</button>
+        </form>
+      </div>
+
+      {# REGISTER #}
+      <div class="auth-screen" id="screen-register">
+        <form class="auth-form" method="post" action="{{ path('app_register') }}">
+          <div class="input-group">
+            <input type="email" class="auth-input" name="email" placeholder="Adresse e-mail" autocomplete="email" required />
+          </div>
+
+          <div class="input-group">
+            <input type="password" class="auth-input" id="reg-password" name="password" placeholder="Mot de passe" autocomplete="new-password" required />
+            <button type="button" class="toggle-pw" data-toggle-pw="reg-password">👁</button>
+          </div>
+
+          <button type="submit" class="btn-auth">Créer mon compte</button>
+        </form>
+      </div>
+
+      {# FORGOT (UI ONLY) #}
+      <div class="auth-screen" id="screen-forgot">
+        <div class="auth-form" style="gap:0.875rem">
+          <h2 style="font-size:1.125rem;">Réinitialiser le mot de passe</h2>
+          <div id="forgot-form-block">
+            <form style="display:flex;flex-direction:column;gap:0.875rem" onsubmit="return false;">
+              <div class="input-group">
+                <input type="email" class="auth-input" id="forgot-email" placeholder="Adresse e-mail" />
+              </div>
+              <button type="button" class="btn-auth" data-forgot-send>Envoyer le lien</button>
+            </form>
+          </div>
+
+          <div class="success-msg" id="forgot-success" style="display:none">
+            <p>Un e-mail de réinitialisation a été envoyé.</p>
+          </div>
+
+          <a href="#" class="forgot-link" data-auth-back>← Retour à la connexion</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+(function () {
+  const modal = document.getElementById('auth-modal');
+  if (!modal) return;
+
+  function show(tab) {
+    ['login','register','forgot'].forEach(s => {
+      const screen = document.getElementById('screen-' + s);
+      if (screen) screen.classList.toggle('active', s === tab);
+    });
+
+    const loginBtn = document.getElementById('tab-login-btn');
+    const regBtn = document.getElementById('tab-register-btn');
+    if (loginBtn) loginBtn.classList.toggle('active', tab === 'login');
+    if (regBtn) regBtn.classList.toggle('active', tab === 'register');
+
+    const tabs = document.getElementById('auth-tabs');
+    if (tabs) tabs.style.display = (tab === 'forgot') ? 'none' : '';
+  }
+
+  function openModal(tab = 'login') {
+    show(tab);
+    modal.classList.add('open');
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+  }
+
+  // fermer en cliquant l'overlay
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  // bouton X
+  modal.querySelector('[data-auth-close]')?.addEventListener('click', closeModal);
+
+  // tabs
+  modal.querySelectorAll('[data-auth-tab]').forEach(btn => {
+    btn.addEventListener('click', () => show(btn.dataset.authTab));
+  });
+
+  // forgot
+  modal.querySelector('[data-auth-forgot]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const success = document.getElementById('forgot-success');
+    const block = document.getElementById('forgot-form-block');
+    if (success) success.style.display = 'none';
+    if (block) block.style.display = '';
+    show('forgot');
+  });
+
+  // back
+  modal.querySelector('[data-auth-back]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    show('login');
+  });
+
+  // fake send
+  modal.querySelector('[data-forgot-send]')?.addEventListener('click', () => {
+    const block = document.getElementById('forgot-form-block');
+    const success = document.getElementById('forgot-success');
+    if (block) block.style.display = 'none';
+    if (success) success.style.display = '';
+  });
+
+  // toggle pw
+  modal.querySelectorAll('[data-toggle-pw]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.togglePw;
+      const input = document.getElementById(id);
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+  });
+Expose global (IMPORTANT)
+  window.SecureScanAuth = { openModal, closeModal };
+  window.openAuthModal = openModal;
+  window.closeAuthModal = closeModal;
+  window.switchAuthTab = show;
+})();
+</script>
+</body>
 </html>

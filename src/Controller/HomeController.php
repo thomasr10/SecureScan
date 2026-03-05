@@ -8,6 +8,9 @@ use App\Service\NpmAuditService;
 use App\Service\PhpstanAnalyzerService;
 use App\Service\ProjectService;
 use App\Service\SemgrepResultNormalizer;
+use App\Service\VulnerabilityNormalise;
+use App\Service\ReportService;
+use App\Service\RemoveDirectoryService;
 use App\Service\SemgrepScanService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -24,18 +27,45 @@ final class HomeController extends AbstractController
 {
     public function __construct(
         private LanguageDetector $languageDetector,
-        private ProjectService $projectService
+        private ProjectService $projectService,
+        private VulnerabilityNormalise $vulnerabilityNormalise,
+        private ReportService $reportService
     ) {}
 
+    // Landing accessible à tous (comme ta maquette)
     #[IsGranted("ROLE_USER")]
     #[Route('/', name: 'app_home', methods: ['GET'])]
     public function showHome(): Response
     {
-        return $this->render('home/index.html.twig', [
-            'controller_name' => 'HomeController',
+        return $this->render('home/index.html.twig');
+    }
+
+    // Page "analyse en cours"
+    #[Route('/scanning', name: 'app_scanning', methods: ['GET'])]
+    public function scanning(): Response
+    {
+        return $this->render('home/scanning.html.twig');
+    }
+
+
+    // Dashboard (placeholder pour l’instant)
+    #[Route('/dashboard', name: 'app_dashboard', methods: ['GET'])]
+    public function dashboard(Request $request): Response
+    {
+        $analysisArray = $request->getSession()->get('analysisArray');
+
+        $score = 80;
+        $status = 'done';
+
+        return $this->render('home/dashboard.html.twig', [
+            'analysisArray' => $analysisArray,
+            'score' => $score,
+            'status' => $status,
         ]);
     }
 
+    // Upload protégé : faut être connecté
+    #[IsGranted("ROLE_USER")]
     #[Route('/upload', name: 'app_upload', methods: ['POST'])]
     public function upload(
         Request $request,
@@ -45,9 +75,14 @@ final class HomeController extends AbstractController
         NpmAuditService $npmAuditService,
         SemgrepScanService $semgrepScanService,
         SemgrepResultNormalizer $semgrepNormalizer
+        RemoveDirectoryService $removeDirectoryService
     ): Response {
         $url = $request->request->get('project_url');
         $zip = $request->files->get('project_zip');
+        $projectsDir = $this->getParameter('kernel.project_dir') . '/projects/';
+        if (is_dir($projectsDir)) {
+            $removeDirectoryService->removeDirectory($projectsDir);
+        }
 
         // =============================
         // SI URL GIT
@@ -73,28 +108,40 @@ final class HomeController extends AbstractController
                     throw new ProcessFailedException($process);
                 }
 
-                // Création + insertion du projet en base
-                $this->projectService->createProject($projectId, $name, $type, $url);
 
-                // Détection du langage
+                // Création + insertion du projet en base
+                $project = $this->projectService->createProject($projectId, $name, $type, $url);
+
                 $languageInfo = $this->languageDetector->detect($projectsDir);
                 $logger->info('Langage détecté', $languageInfo);
 
-                // Stockage temporaire en session
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
-                // Analyses existantes
-                $phpAnalyzerService->analyze($projectsDir, $projectId);
-                $composerAuditService->audit($projectsDir, $projectId);
-                $npmAuditService->audit($projectsDir, $projectId);
-
-                //  Semgrep: stocker + normaliser
+                // ON RECUPERE LES FICHIERS D'ANALYSE
+                $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
                 $semgrepRaw = $semgrepScanService->scan($projectsDir, $projectId);
                 $semgrepNormalized = $semgrepNormalizer->normalize($semgrepRaw, $projectId);
 
                 // Pour debug rapide (sans UI): on stocke en session
                 $request->getSession()->set('semgrepNormalized', $semgrepNormalized);
+
+                if ($request->getSession()->has('analysisArray')){
+                    $request->getSession()->remove('analysisArray');
+                }
+                // NORMALISATION DES ANALYSES + MERGE ANALYSES
+                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+                $request->getSession()->set('analysisArray', $analysisArray);
+
+                // SCORE A MODIFIER
+                $score = 80;
+                // STATUS A MODIFIER
+                $status = 'done';
+                
+                // INSERTION RAPPORT EN BDD
+                $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload Git: ' . $e->getMessage());
@@ -124,40 +171,44 @@ final class HomeController extends AbstractController
                 $zipProject->close();
 
                 // Création + insertion du projet en base
-                $this->projectService->createProject(
-                    $projectId,
-                    $name,
-                    $type,
-                    hash_file('sha256', $zip->getPathname())
-                );
+                $project = $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
 
-                // Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
                 $logger->info('Langage détecté', $languageInfo);
 
-                // Stockage temporaire en session
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
-                // Analyses existantes
-                $phpAnalyzerService->analyze($projectsDir, $projectId);
-                $composerAuditService->audit($projectsDir, $projectId);
-                $npmAuditService->audit($projectsDir, $projectId);
-
+                $phpStan = $phpAnalyzerService->analyze($projectsDir, $projectId);
+                $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
+                $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
+                $semgrepScanService->scan($projectsDir, $projectId);
                 // Semgrep: stocker + normaliser
                 $semgrepRaw = $semgrepScanService->scan($projectsDir, $projectId);
                 $semgrepNormalized = $semgrepNormalizer->normalize($semgrepRaw, $projectId);
 
                 // Pour debug rapide (sans UI): on stocke en session
                 $request->getSession()->set('semgrepNormalized', $semgrepNormalized);
+                
+                // NORMALISATION DES ANALYSES + MERGE ANALYSES
+                $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+                $request->getSession()->set('analysisArray', $analysisArray);
+
+                // SCORE A MODIFIER
+                $score = 80;
+                // STATUS A MODIFIER
+                $status = 'done';
+
+                // INSERTION RAPPORT EN BDD
+                $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload ZIP: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
             }
         }
-
-        return $this->redirectToRoute('app_home');
+        //  IMPORTANT : après upload → page scanning
+        return $this->redirectToRoute('app_scanning');
     }
 
     #[Route('/debug/semgrep', name: 'debug_semgrep', methods: ['GET'])]

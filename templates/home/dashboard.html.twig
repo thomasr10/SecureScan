@@ -1,0 +1,25 @@
+{% extends 'base.html.twig' %}
+{% block title %}Dashboard
+{% endblock %}
+{% block body %}
+	<div style="padding:40px;">
+		<h2>Score:
+			{{score}}</h2>
+		<h2>Status:
+			{{status}}</h2>
+	</div>
+	<div style="padding:40px;">
+		{% if analysisArray is not empty %}
+			{% for vuln in analysisArray %}
+				<h4>{{ vuln['source'] }}</h4>
+				<p>{{ vuln['severity'] }}</p>
+				<p>{{ vuln['file'] }}</p>
+				<p>{{ vuln['line'] }}</p>
+				<p>{{ vuln['message'] }}</p>
+			{% endfor %}
+		{% else %}
+			<p>Aucune vulnérabilité détectée.</p>
+		{% endif %}
+	</div>
+
+{% endblock %}

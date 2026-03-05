@@ -6,14 +6,21 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class ComposerAuditService
 {
-    public function __construct(private ParameterBagInterface $params)
+    public function __construct(private ParameterBagInterface $params, private RemoveDirectoryService $removeDirectoryService)
     {
     }
 
-    public function audit(string $projectDir, string $projectId)
+    public function audit(string $projectDir, string $projectId): array
     {
+        // CHECK SI COMPOSER.JSON
+        if (!file_exists($projectDir . '/composer.json')) {
+            return [];
+        }
         // vérifie que le dossier des reports est bien créer
         $reportsDir = $this->params->get("kernel.project_dir") . "/reports/composer_audit_reports";
+        if (is_dir($reportsDir)) {
+            $this->removeDirectoryService->removeDirectory($reportsDir);
+        }
         if (!is_dir($reportsDir)) {
             mkdir($reportsDir, 0777, true);
         }
@@ -27,11 +34,13 @@ class ComposerAuditService
         $process->run();
         $output = $process->getOutput();
 
-        if (empty($output)) {
-            throw new ProcessFailedException($process);
-        }
+        // JE COMMENTE POUR PAS SUPPR
+        // if (empty($output)) {
+        //     throw new ProcessFailedException($process);
+        // }
 
         // enregistre dans un json le resultat
         file_put_contents($reportsDir . "/composer_audit_" . $projectId . ".json", $output);
+        return json_decode($output, true) ?? [];
     }
 }
