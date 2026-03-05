@@ -22,6 +22,10 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Uid\Uuid;
 use ZipArchive;
+use App\Repository\ProjectRepository;
+use App\Repository\ReportRepository;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 final class HomeController extends AbstractController
 {
@@ -29,7 +33,9 @@ final class HomeController extends AbstractController
         private LanguageDetector $languageDetector,
         private ProjectService $projectService,
         private VulnerabilityNormalise $vulnerabilityNormalise,
-        private ReportService $reportService
+        private ReportService $reportService,
+        private ProjectRepository $projectRepository,
+        private ReportRepository $reportRepository
     ) {}
 
     // Landing accessible à tous (comme ta maquette)
@@ -47,12 +53,46 @@ final class HomeController extends AbstractController
         return $this->render('home/scanning.html.twig');
     }
 
+    #[Route('/download-pdf/project/{id}', name: 'app_download_report', methods: ['GET'])]
+    public function generateAndDownload(int $id): Response
+    {   
+
+        $project = $this->projectRepository->findOneById($id);
+        $reportEntity = $this->reportRepository->findLastReportFromProject($project);
+
+
+        $html = $this->renderView('pdf/report_pdf.html.twig', [
+            'project' => $project,
+            'details' => $reportEntity->getDetails(),
+            'report' => $reportEntity
+        ]);
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        return new Response(
+            $dompdf->output(),
+            200,
+            [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="rapport-securescan.pdf"',
+            ]
+        );
+
+    }
+
 
     // Dashboard (placeholder pour l’instant)
     #[Route('/dashboard', name: 'app_dashboard', methods: ['GET'])]
     public function dashboard(Request $request): Response
     {
         $analysisArray = $request->getSession()->get('analysisArray');
+        $project = $request->getSession()->get('project');
         $semgrepNormalized = $request->getSession()->get('semgrepNormalized');
         $score = 100;
 
@@ -70,6 +110,7 @@ final class HomeController extends AbstractController
             'semgrepNormalized'=> $semgrepNormalized,
             'score' => $score,
             'status' => $status,
+            'project' => $project
         ]);
     }
 
@@ -120,6 +161,7 @@ final class HomeController extends AbstractController
 
                 // Création + insertion du projet en base
                 $project = $this->projectService->createProject($projectId, $name, $type, $url);
+                $request->getSession()->set('project', $project);
 
                 $languageInfo = $this->languageDetector->detect($projectsDir);
                 $logger->info('Langage détecté', $languageInfo);

@@ -31,13 +31,15 @@ class ReportRepository extends ServiceEntityRepository
     //        ;
     //    }
 
-    //    public function findOneBySomeField($value): ?Report
-    //    {
-    //        return $this->createQueryBuilder('r')
-    //            ->andWhere('r.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+       public function findLastReportFromProject($project): ?Report
+       {
+           return $this->createQueryBuilder('r')
+               ->andWhere('r.project = :project')
+               ->setParameter('project', $project)
+               ->orderBy('r.id', 'DESC')
+                ->setMaxResults(1)
+               ->getQuery()
+               ->getOneOrNullResult()
+           ;
+       }
 }
