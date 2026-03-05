@@ -58,8 +58,7 @@
       <form id="scan-form"
             action="{{ path('app_upload') }}"
             method="post"
-            enctype="multipart/form-data"
-            onsubmit="return handleSubmit(event, {{ app.user ? 'true' : 'false' }})">
+            enctype="multipart/form-data">
 
         <div class="tab-switcher" role="tablist">
           <button type="button" class="tab-btn active" id="tab-url"
