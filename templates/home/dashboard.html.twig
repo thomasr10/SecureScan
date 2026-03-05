@@ -8,6 +8,11 @@
 		<h2>Status:
 			{{status}}</h2>
 	</div>
+	<div>
+		<a href="{{ path('app_download_report', {'id': project.id}) }}">
+    		Télécharger le rapport PDF
+		</a>
+	</div>
 	<div style="padding:40px;">
 		{% if analysisArray is not empty or semgrepNormalized is not empty %}
 			{% if analysisArray is not empty %}

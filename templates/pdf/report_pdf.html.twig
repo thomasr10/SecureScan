@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: #222;
+            margin: 20px;
+        }
+        h1 {
+            font-size: 22px;
+            color: #1a1a2e;
+            border-bottom: 2px solid #1a1a2e;
+            padding-bottom: 8px;
+        }
+        h2 {
+            font-size: 16px;
+            color: #333;
+            margin-top: 30px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 4px;
+        }
+        .meta {
+            color: #555;
+            margin-bottom: 20px;
+            font-size: 12px;
+        }
+        .score {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        th {
+            background-color: #1a1a2e;
+            color: white;
+            padding: 7px 10px;
+            text-align: left;
+        }
+        td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #ddd;
+            vertical-align: top;
+        }
+        tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            color: white;
+        }
+        .critical { background-color: #c0392b; }
+        .high     { background-color: #e67e22; }
+        .medium   { background-color: #f1c40f; color: #333; }
+        .low      { background-color: #27ae60; }
+        .info     { background-color: #2980b9; }
+        .empty {
+            color: #888;
+            font-style: italic;
+            margin-top: 10px;
+        }
+        .footer {
+            margin-top: 40px;
+            font-size: 11px;
+            color: #aaa;
+            text-align: center;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        table {
+            table-layout: fixed;
+            word-wrap: break-word;
+        }
+        td {
+            overflow: hidden;
+            word-break: break-all;
+        }
+        th:nth-child(3) { width: 20%; } /* fichier */
+        th:nth-child(5) { width: 30%; } /* message */
+    </style>
+</head>
+<body>
+
+    <h1>Rapport de sécurité — SecureScan</h1>
+
+    <div class="meta">
+        <strong>Projet :</strong> {{ project.name }}<br>
+        <strong>Type :</strong> {{ project.type }}<br>
+        <strong>Généré le :</strong> {{ "now"|date("d/m/Y H:i") }}
+    </div>
+
+    <div class="score">
+        Score de sécurité : {{ report.score }} / 100
+    </div>
+
+    {# ── Vulnérabilités PHPStan / Composer / npm ── #}
+    <h2>Vulnérabilités détectées (PHPStan, Composer Audit, npm audit)</h2>
+
+    {% if details is not empty %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Sévérité</th>
+                    <th>Fichier / Package</th>
+                    <th>Ligne</th>
+                    <th>Message</th>
+                    <th>OWASP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vuln in details %}
+                    <tr>
+                        <td>{{ vuln.source ?? '-' }}</td>
+                        <td>
+                            <span class="badge {{ vuln.severity ?? 'info' }}">
+                                {{ vuln.severity ?? '-' }}
+                            </span>
+                        </td>
+                        <td>{{ vuln.file ?? '-' }}</td>
+                        <td>{{ vuln.line ?? '-' }}</td>
+                        <td>{{ vuln.message ?? '-' }}</td>
+                        <td>{{ vuln.owasp ?? '-' }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">Aucune vulnérabilité détectée.</p>
+    {% endif %}
+
+    {# ── Vulnérabilités Semgrep ── #}
+    {% if semgrepNormalized is defined and semgrepNormalized is not empty %}
+        <h2>Vulnérabilités détectées (Semgrep)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Outil</th>
+                    <th>Sévérité</th>
+                    <th>Règle</th>
+                    <th>Fichier</th>
+                    <th>Ligne</th>
+                    <th>Message</th>
+                    <th>OWASP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vuln in semgrepNormalized %}
+                    <tr>
+                        <td>{{ vuln.tool ?? 'semgrep' }}</td>
+                        <td>
+                            <span class="badge {{ vuln.severity ?? 'info' }}">
+                                {{ vuln.severity ?? '-' }}
+                            </span>
+                        </td>
+                        <td>{{ vuln.ruleId ?? '-' }}</td>
+                        <td>{{ vuln.file ?? '-' }}</td>
+                        <td>{{ vuln.startLine ?? '-' }}</td>
+                        <td>{{ vuln.message ?? '-' }}</td>
+                        <td>
+                            {% if vuln.owasp is defined and vuln.owasp is not empty %}
+                                {% for owasp in vuln.owasp %}{{ owasp }}{% if not loop.last %}, {% endif %}{% endfor %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    <div class="footer">
+        Rapport généré automatiquement par SecureScan — IPSSI Hackathon 2026
+    </div>
+
+</body>
+</html>
