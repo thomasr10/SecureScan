@@ -31,17 +31,31 @@ final class HomeController extends AbstractController
         private ReportService $reportService
     ) {}
 
-    #[IsGranted("ROLE_USER")]
+    // Landing accessible à tous (comme ta maquette)
     #[Route('/', name: 'app_home', methods: ['GET'])]
     public function showHome(): Response
     {
-        return $this->render('home/index.html.twig', [
-            'controller_name' => 'HomeController',
-        ]);
+        return $this->render('home/index.html.twig');
     }
 
-    #[Route('/upload', name: 'app_upload', methods: ['POST'])]
+    // Page "analyse en cours"
+    #[Route('/scanning', name: 'app_scanning', methods: ['GET'])]
+    public function scanning(): Response
+    {
+        return $this->render('home/scanning.html.twig');
+    }
 
+
+    // Dashboard (placeholder pour l’instant)
+    #[Route('/dashboard', name: 'app_dashboard', methods: ['GET'])]
+    public function dashboard(): Response
+    {
+        return $this->render('home/dashboard.html.twig');
+    }
+
+    // Upload protégé : faut être connecté
+    #[IsGranted("ROLE_USER")]
+    #[Route('/upload', name: 'app_upload', methods: ['POST'])]
     public function upload(
         Request $request,
         LoggerInterface $logger,
@@ -82,16 +96,13 @@ final class HomeController extends AbstractController
                     throw new ProcessFailedException($process);
                 }
 
+
                 // Création + insertion du projet en base
                 $project = $this->projectService->createProject($projectId, $name, $type, $url);
 
-                //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
-
-                //  Log (pour vérifier sans UI)
                 $logger->info('Langage détecté', $languageInfo);
 
-                //  Stockage temporaire en session
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
@@ -112,7 +123,9 @@ final class HomeController extends AbstractController
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
 
-                // return $this->redirectToRoute('app_home');
+                // IMPORTANT : après upload → page scanning
+                return $this->redirectToRoute('app_scanning');
+
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload Git: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
@@ -143,13 +156,9 @@ final class HomeController extends AbstractController
                 // Création + insertion du projet en base
                 $project = $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
 
-                //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
-
-                //  Log (pour vérifier sans UI)
                 $logger->info('Langage détecté', $languageInfo);
 
-                //  Stockage temporaire en session
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
@@ -169,7 +178,9 @@ final class HomeController extends AbstractController
                 $this->reportService->insertReport($languageInfo['detected'], $score, $status, $analysisArray, $project);
 
 
-                // return $this->redirectToRoute('app_home');
+                //  IMPORTANT : après upload → page scanning
+                return $this->redirectToRoute('app_scanning');
+
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload ZIP: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
