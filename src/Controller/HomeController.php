@@ -74,7 +74,7 @@ final class HomeController extends AbstractController
         ComposerAuditService $composerAuditService,
         NpmAuditService $npmAuditService,
         SemgrepScanService $semgrepScanService,
-        SemgrepResultNormalizer $semgrepNormalizer
+        SemgrepResultNormalizer $semgrepNormalizer,
         RemoveDirectoryService $removeDirectoryService
     ): Response {
         $url = $request->request->get('project_url');
