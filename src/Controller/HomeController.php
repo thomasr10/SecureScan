@@ -32,6 +32,7 @@ final class HomeController extends AbstractController
     ) {}
 
     // Landing accessible à tous (comme ta maquette)
+    #[IsGranted("ROLE_USER")]
     #[Route('/', name: 'app_home', methods: ['GET'])]
     public function showHome(): Response
     {
