@@ -49,9 +49,18 @@ final class HomeController extends AbstractController
 
     // Dashboard (placeholder pour l’instant)
     #[Route('/dashboard', name: 'app_dashboard', methods: ['GET'])]
-    public function dashboard(): Response
+    public function dashboard(Request $request): Response
     {
-        return $this->render('home/dashboard.html.twig');
+        $analysisArray = $request->getSession()->get('analysisArray');
+
+        $score = 80;
+        $status = 'done';
+
+        return $this->render('home/dashboard.html.twig', [
+            'analysisArray' => $analysisArray,
+            'score' => $score,
+            'status' => $status,
+        ]);
     }
 
     // Upload protégé : faut être connecté
@@ -112,8 +121,13 @@ final class HomeController extends AbstractController
                 $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
                 $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
                 $semgrepScanService->scan($projectsDir, $projectId);
+
+                if ($request->getSession()->has('analysisArray')){
+                    $request->getSession()->remove('analysisArray');
+                }
                 // NORMALISATION DES ANALYSES + MERGE ANALYSES
                 $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+                $request->getSession()->set('analysisArray', $analysisArray);
 
                 // SCORE A MODIFIER
                 $score = 80;
@@ -163,8 +177,10 @@ final class HomeController extends AbstractController
                 $composerAudit = $composerAuditService->audit($projectsDir, $projectId);
                 $npmAudit = $npmAuditService->audit($projectsDir, $projectId);
                 $semgrepScanService->scan($projectsDir, $projectId);
+                
                 // NORMALISATION DES ANALYSES + MERGE ANALYSES
                 $analysisArray = $this->vulnerabilityNormalise->merge($phpStan, $composerAudit, $npmAudit);
+                $request->getSession()->set('analysisArray', $analysisArray);
 
                 // SCORE A MODIFIER
                 $score = 80;
