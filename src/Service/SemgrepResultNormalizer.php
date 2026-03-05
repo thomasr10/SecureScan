@@ -28,6 +28,7 @@ class SemgrepResultNormalizer
                 'ruleId' => $r['check_id'] ?? 'semgrep.unknown',
                 'severity' => $severity,
                 'message' => $r['extra']['message'] ?? '',
+                'owasp' => $r['extra']['metadata']['owasp'] ?? '',
                 'file' => $r['path'] ?? '',
                 'startLine' => $r['start']['line'] ?? null,
                 'endLine' => $r['end']['line'] ?? null,
