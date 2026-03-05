@@ -23,17 +23,30 @@ final class HomeController extends AbstractController
         private ProjectService $projectService
     ) {}
 
-    #[IsGranted("ROLE_USER")]
+    // Landing accessible à tous (comme ta maquette)
     #[Route('/', name: 'app_home', methods: ['GET'])]
     public function showHome(): Response
     {
-        return $this->render('home/index.html.twig', [
-            'controller_name' => 'HomeController',
-        ]);
+        return $this->render('home/index.html.twig');
     }
 
-    #[Route('/upload', name: 'app_upload', methods: ['POST'])]
+    // Page "analyse en cours"
+    #[Route('/scanning', name: 'app_scanning', methods: ['GET'])]
+    public function scanning(): Response
+    {
+        return $this->render('home/scanning.html.twig');
+    }
 
+    // Dashboard (placeholder pour l’instant)
+    #[Route('/dashboard', name: 'app_dashboard', methods: ['GET'])]
+    public function dashboard(): Response
+    {
+        return $this->render('home/dashboard.html.twig');
+    }
+
+    // Upload protégé : faut être connecté
+    #[IsGranted("ROLE_USER")]
+    #[Route('/upload', name: 'app_upload', methods: ['POST'])]
     public function upload(Request $request, LoggerInterface $logger, PhpstanAnalyzerService $phpAnalyzerService): Response
     {
         $url = $request->request->get('project_url');
@@ -62,23 +75,20 @@ final class HomeController extends AbstractController
                 if (!$process->isSuccessful()) {
                     throw new ProcessFailedException($process);
                 }
-                
-                // Création + insertion du projet en base
+
                 $this->projectService->createProject($projectId, $name, $type, $url);
 
-                //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
-
-                //  Log (pour vérifier sans UI)
                 $logger->info('Langage détecté', $languageInfo);
 
-                //  Stockage temporaire en session
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
                 $phpAnalyzerService->analyze($projectsDir, $projectId);
 
-                // return $this->redirectToRoute('app_home');
+                // IMPORTANT : après upload → page scanning
+                return $this->redirectToRoute('app_scanning');
+
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload Git: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
@@ -106,28 +116,30 @@ final class HomeController extends AbstractController
                 $zipProject->extractTo($projectsDir);
                 $zipProject->close();
 
-                // Création + insertion du projet en base
-                $this->projectService->createProject($projectId, $name, $type, hash_file('sha256', $zip->getPathname()));
+                $this->projectService->createProject(
+                    $projectId,
+                    $name,
+                    $type,
+                    hash_file('sha256', $zip->getPathname())
+                );
 
-                //  Détection du langage
                 $languageInfo = $this->languageDetector->detect($projectsDir);
-
-                //  Log (pour vérifier sans UI)
                 $logger->info('Langage détecté', $languageInfo);
 
-                //  Stockage temporaire en session
                 $request->getSession()->set('languageInfo', $languageInfo);
                 $request->getSession()->set('projectsDir', $projectsDir);
 
                 $phpAnalyzerService->analyze($projectsDir, $projectId);
 
-                // return $this->redirectToRoute('app_home');
+                //  IMPORTANT : après upload → page scanning
+                return $this->redirectToRoute('app_scanning');
+
             } catch (\Throwable $e) {
                 $logger->error('Erreur upload ZIP: ' . $e->getMessage());
                 return $this->redirectToRoute('app_home');
             }
         }
-        
+
         return $this->redirectToRoute('app_home');
     }
 }

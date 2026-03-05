@@ -1,38 +1,29 @@
 {% extends 'base.html.twig' %}
-
-{% block title %}
-	Inscription
-{% endblock %}
+{% block title %}Inscription{% endblock %}
 
 {% block body %}
-	<form method="post">
-		{% if error %}
-			<div role="alert">{{ error }}</div>
-		{% endif %}
+<div style="max-width:420px;margin:80px auto;padding:24px;background:#0b1220;border:1px solid #1f2a44;border-radius:12px;color:#fff">
+  <h1 style="margin-bottom:16px">Inscription</h1>
 
-		<h1>Créer un compte</h1>
+  {% if error %}
+    <div style="background:#3b0d0d;padding:10px;border-radius:8px;margin-bottom:12px">
+      {{ error }}
+    </div>
+  {% endif %}
 
-		{% if app.user %}
-			<div class="mb-3">
-				Vous êtes connecté en tant que{{ app.user.userIdentifier }},
-				<a href="{{ logout_path() }}">Déconnexion</a>
-			</div>
-		{% endif %}
+  <form method="post" action="{{ path('app_register') }}">
+    <input type="email" name="email" placeholder="Email" required
+           style="width:100%;padding:10px;border-radius:8px;margin-bottom:10px">
+    <input type="password" name="password" placeholder="Mot de passe" required
+           style="width:100%;padding:10px;border-radius:8px;margin-bottom:10px">
 
-		<div>
-			<label for="email">Email</label>
-			<input type="email" name="email" id="email" autocomplete="email" required autofocus>
-		</div>
+    <button type="submit" style="width:100%;padding:10px;border-radius:8px;background:#22c55e;color:#fff">
+      Créer le compte
+    </button>
+  </form>
 
-		<div>
-			<label for="password">Mot de passe</label>
-			<input type="password" name="password" id="password" autocomplete="new-password" required>
-		</div>
-
-		<input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('register') }}">
-
-		<button type="submit">
-			S'inscrire
-		</button>
-	</form>
+  <div style="margin-top:12px">
+    <a href="{{ path('app_login') }}" style="color:#7dd3fc">Retour connexion</a>
+  </div>
+</div>
 {% endblock %}
